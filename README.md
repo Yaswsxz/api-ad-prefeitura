@@ -1,85 +1,246 @@
-# API Gerenciador de Usuários - Active Directory
+# 🏛️ API de Gerenciamento de Usuários - Active Directory
 
-API REST em **FastAPI** para a prefeitura gerenciar contas de funcionários/estagiários
-diretamente no **Active Directory**, via protocolo **LDAP** (funciona com qualquer versão
-do AD, incluindo a de 2006/Windows Server 2003).
+API RESTful desenvolvida para **gerenciar usuários no Active Directory** da Prefeitura de Londrina, com foco em **automação, segurança e auditoria completa**.
 
-## Funcionalidades
+---
 
-| Operação | Método | Rota |
-|---|---|---|
-| Listar/buscar usuários | GET | `/usuarios?nome=joao` |
-| Consultar um usuário | GET | `/usuarios/{login}` |
-| Criar usuário | POST | `/usuarios` |
-| Atualizar usuário | PUT | `/usuarios/{login}` |
-| Remover usuário | DELETE | `/usuarios/{login}` |
-| Trocar senha | POST | `/usuarios/{login}/trocar-senha` |
-| Desabilitar usuário | POST | `/usuarios/{login}/desabilitar` |
-| Habilitar usuário | POST | `/usuarios/{login}/habilitar` |
+## 📋 Índice
 
-## Como rodar localmente
+- [Sobre o Projeto](#-sobre-o-projeto)
+- [Funcionalidades](#-funcionalidades)
+- [Tecnologias Utilizadas](#-tecnologias-utilizadas)
+- [Arquitetura](#-arquitetura)
+- [Pré-requisitos](#-pré-requisitos)
+- [Instalação e Configuração](#-instalação-e-configuração)
+- [Endpoints da API](#-endpoints-da-api)
+- [Auditoria e LGPD](#-auditoria-e-lgpd)
+- [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Autora](#-autora)
+
+---
+
+## 🎯 Sobre o Projeto
+
+Esta API foi desenvolvida para **automatizar e centralizar** o gerenciamento de usuários no Active Directory da Prefeitura de Londrina. Ela permite:
+
+- ✅ Criar, editar, remover e consultar usuários
+- ✅ Trocar senhas (automáticas ou personalizadas)
+- ✅ Habilitar/desabilitar contas
+- ✅ Autenticar usuários no AD
+- ✅ **Auditoria completa** de todas as ações (LGPD)
+
+---
+
+## ⚡ Funcionalidades
+
+| Funcionalidade | Descrição |
+|----------------|-----------|
+| 👤 **CRUD de Usuários** | Criar, listar, buscar, atualizar e remover usuários no AD |
+| 🔑 **Gerenciamento de Senhas** | Troca de senha com geração automática |
+| 🔒 **Controle de Contas** | Habilitar/desabilitar usuários |
+| 🔐 **Autenticação** | Login/logout com registro de tentativas |
+| 📊 **Auditoria Completa** | Registro de TODAS as ações no SQLite |
+| 📝 **Documentação Automática** | Swagger UI e Redoc |
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+| Tecnologia | Versão | Finalidade |
+|------------|--------|------------|
+| **Python** | 3.11+ | Linguagem principal |
+| **FastAPI** | 0.115.0 | Framework web |
+| **LDAP3** | 2.9.1 | Comunicação com Active Directory |
+| **SQLAlchemy** | 2.0.52 | ORM para banco de dados |
+| **SQLite** | - | Banco de dados local (auditoria) |
+| **Pydantic** | 2.9.2 | Validação de dados |
+| **Uvicorn** | 0.30.6 | Servidor ASGI |
+
+---
+
+## 🏗️ Arquitetura
+
+A API segue o padrão de **arquitetura em camadas**:
+
+```
+┌─────────────────────────────────────────────┐
+│          CAMADA DE APRESENTAÇÃO             │
+│  (routers/) - Endpoints e validação        │
+└─────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────┐
+│          CAMADA DE NEGÓCIO                  │
+│  (services/) - Regras de negócio           │
+└─────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────┐
+│       CAMADA DE INFRAESTRUTURA             │
+│  (core/) - Conexão LDAP, configs           │
+└─────────────────────────────────────────────┘
+                     │
+     ┌───────────────┴───────────────┐
+     ▼                               ▼
+┌──────────────────┐     ┌──────────────────────┐
+│ Active Directory │     │  SQLite (Auditoria)  │
+│    (LDAP)        │     │  - login_history     │
+│                  │     │  - activity_history  │
+└──────────────────┘     └──────────────────────┘
+```
+
+---
+
+## 📦 Pré-requisitos
+
+Antes de começar, você vai precisar ter instalado:
+
+- **Python 3.11+**
+- **Acesso à rede da Prefeitura de Londrina** (ou VPN)
+- **Credenciais do Active Directory**
+- **Git** (para clonar o repositório)
+
+---
+
+## ⚙️ Instalação e Configuração
+
+### 1. Clone o repositório
 
 ```bash
-# 1. Criar e ativar ambiente virtual
+git clone https://github.com/Yaswsxz/api-ad-prefeitura.git
+cd api-ad-prefeitura
+```
+
+### 2. Crie e ative um ambiente virtual (opcional)
+
+```bash
 python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # Linux/Mac
-
-# 2. Instalar dependências
-pip install -r requirements.txt
-
-# 3. Configurar variáveis de ambiente
-copy .env.example .env       # Windows
-cp .env.example .env         # Linux/Mac
-# edite o .env com os dados reais do seu Active Directory
-
-# 4. Rodar a API
-uvicorn app.main:app --reload
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
 ```
 
-A API sobe em `http://localhost:8000`.
-Documentação interativa (Swagger) automática em `http://localhost:8000/docs`.
+### 3. Instale as dependências
 
-## Sobre a conexão com o AD
+```bash
+python -m pip install -r requirements.txt
+```
 
-- Para **apenas ler** dados (listar/buscar), uma conexão LDAP simples (porta 389) já funciona.
-- Para **criar, trocar senha ou desabilitar** contas, o Active Directory **exige** uma conexão
-  criptografada — use `ldaps://` (porta 636) no `.env`. Se o seu controlador de domínio
-  ainda não tem LDAPS habilitado, isso precisa ser configurado no servidor (certificado no DC)
-  antes dessas operações funcionarem.
-- A conta de serviço (`AD_BIND_USER`) usada pela API precisa ter permissão delegada no AD
-  para criar/alterar objetos de usuário na OU configurada (`AD_USER_OU`).
+### 4. Configure o arquivo `.env`
 
-## Geração automática de login e senha
+Crie um arquivo `.env` na raiz do projeto com base no `.env.example`:
 
-- Login: `primeiro.ultimo` (minúsculo, sem acentos), conforme padrão definido.
-- Senha: 8 caracteres aleatórios, com maiúscula, minúscula, número e símbolo
-  (atende à política de complexidade padrão do AD).
+```env
+# Active Directory
+AD_SERVER=ldap://seu-servidor-ad
+AD_DOMAIN=seu-dominio.local
+AD_BASE_DN=DC=seu-dominio,DC=local
+AD_USER_OU=OU=Usuarios,DC=seu-dominio,DC=local
+AD_BIND_USER=svc_api@seu-dominio.local
+AD_BIND_PASSWORD=sua_senha
 
-## Estrutura do projeto
+# Banco de Dados
+DATABASE_URL=sqlite:///./ad_audit.db
+```
+
+### 5. Execute a API
+
+```bash
+python -m uvicorn app.main:app --reload
+```
+
+A API estará disponível em: **http://localhost:8000**
+
+---
+
+## 📚 Endpoints da API
+
+### 👤 Usuários (`/usuarios`)
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/usuarios` | Lista todos os usuários |
+| GET | `/usuarios/{login}` | Busca um usuário específico |
+| POST | `/usuarios` | Cria um novo usuário |
+| PUT | `/usuarios/{login}` | Atualiza dados do usuário |
+| DELETE | `/usuarios/{login}` | Remove um usuário |
+| POST | `/usuarios/{login}/trocar-senha` | Troca a senha |
+| POST | `/usuarios/{login}/habilitar` | Ativa a conta |
+| POST | `/usuarios/{login}/desabilitar` | Desativa a conta |
+| POST | `/usuarios/auth` | Autentica um usuário |
+| POST | `/usuarios/{login}/logout` | Registra logout |
+
+### 📊 Auditoria (`/auditoria`)
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/auditoria/login-history` | Histórico de logins/logouts |
+| GET | `/auditoria/activity-history` | Histórico de ações |
+| GET | `/auditoria/user-summary/{login}` | Resumo de atividades por usuário |
+| GET | `/auditoria/security-report` | Relatório de segurança |
+
+### 📖 Documentação Interativa
+
+- **Swagger UI:** http://localhost:8000/docs
+- **Redoc:** http://localhost:8000/redoc
+
+---
+
+## 🔐 Auditoria e LGPD
+
+Todas as ações realizadas na API são registradas automaticamente no SQLite, garantindo:
+
+| Requisito LGPD | Como é atendido |
+|----------------|-----------------|
+| **Rastreabilidade** | Toda ação é registrada |
+| **Quem fez o quê** | `username` + `action` + `target_user` |
+| **Quando** | `timestamp` |
+| **De onde** | `ip_address` + `user_agent` |
+| **Sucesso/falha** | `status` (SUCCESS/FAILED) |
+
+---
+
+## 📂 Estrutura do Projeto
 
 ```
-ad-api/
+ApiTeste/
 ├── app/
-│   ├── main.py                 # ponto de entrada da aplicação
-│   ├── core/
-│   │   ├── config.py           # configurações via .env
-│   │   ├── ldap_connection.py  # conexão com o AD
-│   │   └── generators.py       # geração de login/senha
-│   ├── schemas/
-│   │   └── user.py             # modelos Pydantic (entrada/saída)
-│   ├── services/
-│   │   └── ad_service.py       # regras de negócio + chamadas LDAP
-│   └── routers/
-│       └── users.py            # rotas da API
-├── requirements.txt
-├── .env.example
-└── README.md
+│   ├── core/               # Configurações e utilidades
+│   │   ├── config.py       # Variáveis de ambiente
+│   │   ├── generators.py   # Geradores de login/senha
+│   │   └── ldap_connection.py  # Conexão com AD
+│   ├── routers/            # Endpoints
+│   │   ├── users.py        # Rotas de usuários
+│   │   └── audit.py        # Rotas de auditoria
+│   ├── schemas/            # Validação de dados
+│   │   └── user.py         # Schemas Pydantic
+│   ├── services/           # Lógica de negócio
+│   │   └── ad_service.py   # Integração com AD
+│   ├── audit_service.py    # Serviço de auditoria
+│   ├── database.py         # Modelos SQLAlchemy
+│   └── main.py             # Ponto de entrada
+├── .env                    # Configurações (NÃO VERSIONAR)
+├── .env.example            # Template de configurações
+├── .gitignore              # Arquivos ignorados
+├── README.md               # Documentação
+└── requirements.txt        # Dependências
 ```
 
-## Próximos passos sugeridos
+---
 
-- Adicionar autenticação na própria API (ex: JWT) para que só usuários autorizados
-  da prefeitura possam chamá-la — hoje as rotas estão abertas.
-- Testar a conexão LDAPS com o controlador de domínio real antes de ir para produção.
-- Conectar o frontend (HTML/CSS/JS) que você já tinha planejado a estas rotas.
+## 👩‍💻 Autora
+
+**Yasmin Fernanda de Carvalho**  
+📧 yasmincarvalho06@icloud.com  
+🔗 [GitHub](https://github.com/Yaswsxz)  
+
+*Estagiária de Desenvolvimento - Prefeitura Municipal de Londrina*
+
+---
+
+## 📄 Licença
+
+Projeto interno - Prefeitura Municipal de Londrina/PR
+
+---
+
+**⭐ Não esqueça de dar uma estrela no repositório!**
