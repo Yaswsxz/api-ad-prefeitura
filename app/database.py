@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Index
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker  # ← MUDANÇA AQUI!
 from datetime import datetime
 import os
 
@@ -12,7 +11,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+Base = declarative_base()  # ← AGORA VEM DO sqlalchemy.orm
 
 
 class LoginHistory(Base):
@@ -59,6 +58,8 @@ class ActivityHistory(Base):
         Index('idx_activity_action', 'action'),
     )
 
+
+# Cria as tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
 
 
