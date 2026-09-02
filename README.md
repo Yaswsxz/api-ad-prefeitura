@@ -230,7 +230,7 @@ ApiTeste/
 ## Autora
 
 **Yasmin Fernanda de Carvalho**  
-E-mail: yasmincarvalho06@icloud.com  
+E-mail: yasmincarvalho.dev06@gmail.com  
 GitHub: [Yaswsxz](https://github.com/Yaswsxz)
 
 *Estagiária de Desenvolvimento - Prefeitura Municipal de Londrina*
