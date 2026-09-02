@@ -35,5 +35,4 @@ def test_auditoria():
 def test_login_invalido():
     """Testa login com credenciais invalidas."""
     response = client.post("/usuarios/login?login=invalido&senha=errada")
-    # Aceita varios codigos ate o endpoint ser implementado
     assert response.status_code in [404, 401, 503, 405]
