@@ -95,10 +95,12 @@ A API segue o padrão de arquitetura em camadas:
 
 Antes de começar, você vai precisar ter instalado:
 
-- Python 3.11+
+- Python **3.11** (ou superior, mas com suporte confirmado para 3.11)
 - Acesso à rede da Prefeitura de Londrina (ou VPN)
 - Credenciais do Active Directory
 - Git (para clonar o repositório)
+
+⚠️ **Importante:** Este projeto é compatível e foi testado com **Python 3.11**. Para evitar erros de instalação (como do `pydantic-core`), utilize a versão 3.11 no comando `py -3.11`.
 
 ---
 
@@ -119,10 +121,10 @@ source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 ```
 
-### 3. Instale as dependências
+### 3. Instale as dependências (usando Python 3.11)
 
 ```bash
-python -m pip install -r requirements.txt
+py -3.11 -m pip install -r requirements.txt
 ```
 
 ### 4. Configure o arquivo `.env`
@@ -142,10 +144,10 @@ AD_BIND_PASSWORD=sua_senha
 DATABASE_URL=sqlite:///./ad_audit.db
 ```
 
-### 5. Execute a API
+### 5. Execute a API (sempre com Python 3.11)
 
 ```bash
-python -m uvicorn app.main:app --reload
+py -3.11 -m uvicorn app.main:app --reload
 ```
 
 A API estará disponível em: http://localhost:8000
