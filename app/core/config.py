@@ -7,11 +7,11 @@ class Settings(BaseSettings):
     Usa Pydantic para validação automática e caching com lru_cache.
     """
     # --- Active Directory ---
-    AD_SERVER: str = "ldap://192.168.0.1"
-    AD_DOMAIN: str = "prefeitura.local"
-    AD_BASE_DN: str = "DC=prefeitura,DC=local"
-    AD_USER_OU: str = "OU=Funcionarios,DC=prefeitura,DC=local"
-    AD_BIND_USER: str = "svc_api@prefeitura.local"
+    AD_SERVER: str = "ldap://cegonha.londrina.pr.gov.br"
+    AD_DOMAIN: str = "cegonha.londrina.pr.gov.br"
+    AD_BASE_DN: str = "OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+    AD_USER_OU: str = "OU=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+    AD_BIND_USER: str = "pmldomain\grids1.estag"
     AD_BIND_PASSWORD: str = ""
 
     # --- Banco de Dados ---
