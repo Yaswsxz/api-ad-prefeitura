@@ -17,15 +17,9 @@ UAC_NORMAL_DESABILITADA = 514
 def _entry_to_usuario_out(entry) -> UsuarioOut:
     """
     Converte um registro do LDAP para o schema de saída da API.
-
-    Args:
-        entry: Entrada retornada pela consulta LDAP.
-
-    Returns:
-        UsuarioOut: Dados formatados no padrão da API.
     """
     uac = int(entry.userAccountControl.value) if entry.userAccountControl.value else UAC_NORMAL_ATIVO
-    ativo = not (uac & 2)  # Bit 2 = conta desabilitada
+    ativo = not (uac & 2)
     return UsuarioOut(
         login=str(entry.sAMAccountName.value),
         nome_completo=str(entry.cn.value),
@@ -39,15 +33,6 @@ def _entry_to_usuario_out(entry) -> UsuarioOut:
 def _resolver_dn(login: str) -> str:
     """
     Busca o Distinguished Name completo a partir do login (sAMAccountName).
-
-    Args:
-        login (str): Nome de usuário no AD.
-
-    Returns:
-        str: DN completo do usuário.
-
-    Raises:
-        HTTPException: Se o usuário não for encontrado (404).
     """
     conn = get_connection()
     try:
@@ -66,12 +51,6 @@ def _resolver_dn(login: str) -> str:
 def listar_usuarios(filtro_nome: str | None = None):
     """
     Retorna lista de todos os usuários do Active Directory.
-
-    Args:
-        filtro_nome (str | None): Filtro opcional por parte do nome (CN).
-
-    Returns:
-        list[UsuarioOut]: Lista de usuários formatados.
     """
     conn = get_connection()
     try:
@@ -94,15 +73,6 @@ def listar_usuarios(filtro_nome: str | None = None):
 def buscar_usuario(login: str) -> UsuarioOut:
     """
     Busca um usuário específico no AD pelo login.
-
-    Args:
-        login (str): Nome de usuário.
-
-    Returns:
-        UsuarioOut: Dados do usuário.
-
-    Raises:
-        HTTPException: Se o usuário não for encontrado (404).
     """
     conn = get_connection()
     try:
@@ -122,32 +92,16 @@ def buscar_usuario(login: str) -> UsuarioOut:
 def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioCriadoOut:
     """
     Cria um novo usuário no Active Directory com login e senha gerados automaticamente.
-
-    O fluxo é:
-        1. Gera login no formato 'primeiro.ultimo'
-        2. Gera senha aleatória de 8 caracteres
-        3. Verifica se o login já existe no AD
-        4. Cria o usuário com atributos básicos
-        5. Define a senha e ativa a conta
-        6. Registra a ação no banco de auditoria
-
-    Args:
-        dados (UsuarioCreate): Dados do usuário (nome, cargo, etc.)
-        ip_address (str, optional): IP da origem da requisição.
-        user_agent (str, optional): User-Agent do navegador.
-        operator (str): Identificação de quem executou a ação.
-
-    Returns:
-        UsuarioCriadoOut: Dados do usuário criado + senha gerada.
-
-    Raises:
-        HTTPException: Se login já existir (409) ou erro no AD (500).
+    O usuário é criado na OU de ATIVOS (padrão).
     """
     login = gerar_login(dados.primeiro_nome, dados.ultimo_nome)
     senha = gerar_senha(8)
     nome_completo = f"{dados.primeiro_nome} {dados.ultimo_nome}"
     email = dados.email or f"{login}@{settings.AD_DOMAIN}"
-    dn = f"CN={nome_completo},{settings.AD_USER_OU}"
+    
+    # Define a OU de criação (ATIVOS)
+    ou_atual = "OU=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+    dn = f"CN={nome_completo},{ou_atual}"
 
     conn = get_connection()
     try:
@@ -170,7 +124,7 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
             "sn": dados.ultimo_nome,
             "mail": email,
             "displayName": nome_completo,
-            "userAccountControl": UAC_NORMAL_DESABILITADA,  # Começa desabilitado
+            "userAccountControl": UAC_NORMAL_DESABILITADA,
         }
         if dados.cargo:
             attrs["title"] = dados.cargo
@@ -208,7 +162,6 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
             )
             db.close()
         except Exception as e:
-            # Não interrompe o fluxo se falhar o registro do log
             print(f"Erro ao registrar auditoria: {e}")
 
         return UsuarioCriadoOut(**usuario.model_dump(), senha_gerada=senha)
@@ -222,24 +175,10 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
 def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
     """
     Atualiza dados de um usuário existente no AD (cargo, email, telefone).
-
-    Args:
-        login (str): Login do usuário a ser atualizado.
-        dados (UsuarioUpdate): Campos a serem alterados.
-        ip_address (str, optional): IP da origem.
-        user_agent (str, optional): User-Agent.
-        operator (str): Quem executou a ação.
-
-    Returns:
-        UsuarioOut: Dados atualizados do usuário.
-
-    Raises:
-        HTTPException: Se o usuário não for encontrado ou erro no AD.
     """
     dn_usuario = _resolver_dn(login)
     mudancas = {}
 
-    # Monta apenas os campos que foram enviados
     if dados.cargo is not None:
         mudancas["title"] = [(MODIFY_REPLACE, [dados.cargo])]
     if dados.email is not None:
@@ -258,7 +197,6 @@ def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, 
 
         usuario = buscar_usuario(login)
 
-        # Registra a ação
         try:
             from app.audit_service import AuditService
             from app.database import SessionLocal
@@ -285,15 +223,6 @@ def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, 
 def remover_usuario(login: str, ip_address: str = None, user_agent: str = None, operator: str = "system") -> None:
     """
     Remove um usuário do Active Directory.
-
-    Args:
-        login (str): Login do usuário a ser removido.
-        ip_address (str, optional): IP da origem.
-        user_agent (str, optional): User-Agent.
-        operator (str): Quem executou a ação.
-
-    Raises:
-        HTTPException: Se o usuário não for encontrado ou erro no AD.
     """
     dn_usuario = _resolver_dn(login)
     conn = get_connection()
@@ -302,7 +231,6 @@ def remover_usuario(login: str, ip_address: str = None, user_agent: str = None, 
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao remover usuário: {conn.result}")
 
-        # Registra a ação
         try:
             from app.audit_service import AuditService
             from app.database import SessionLocal
@@ -328,19 +256,6 @@ def remover_usuario(login: str, ip_address: str = None, user_agent: str = None, 
 def trocar_senha(login: str, nova_senha: str | None, ip_address: str = None, user_agent: str = None, operator: str = "system") -> str:
     """
     Troca a senha de um usuário no AD. Se não for fornecida, gera uma automática.
-
-    Args:
-        login (str): Login do usuário.
-        nova_senha (str | None): Nova senha (opcional).
-        ip_address (str, optional): IP da origem.
-        user_agent (str, optional): User-Agent.
-        operator (str): Quem executou a ação.
-
-    Returns:
-        str: A nova senha (gerada ou fornecida).
-
-    Raises:
-        HTTPException: Se o usuário não for encontrado ou erro no AD.
     """
     dn_usuario = _resolver_dn(login)
     senha = nova_senha or gerar_senha(8)
@@ -351,7 +266,6 @@ def trocar_senha(login: str, nova_senha: str | None, ip_address: str = None, use
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao trocar senha: {conn.result}")
 
-        # Registra a ação
         try:
             from app.audit_service import AuditService
             from app.database import SessionLocal
@@ -375,36 +289,72 @@ def trocar_senha(login: str, nova_senha: str | None, ip_address: str = None, use
         conn.unbind()
 
 
-def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
+def mover_usuario(login: str, nova_ou: str) -> bool:
     """
-    Habilita ou desabilita a conta de um usuário no AD.
+    Move um usuário para uma nova OU (Organizational Unit).
 
     Args:
         login (str): Login do usuário.
-        desabilitar (bool): True = desabilitar, False = habilitar.
-        ip_address (str, optional): IP da origem.
-        user_agent (str, optional): User-Agent.
-        operator (str): Quem executou a ação.
+        nova_ou (str): Caminho completo da OU de destino.
+                       Ex: "OU=Inativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
 
     Returns:
-        UsuarioOut: Dados atualizados do usuário.
+        bool: True se movido com sucesso, False caso contrário.
+    """
+    try:
+        dn_atual = _resolver_dn(login)
+        usuario = buscar_usuario(login)
+        nome_completo = usuario.nome_completo
+        novo_dn = f"CN={nome_completo},{nova_ou}"
 
-    Raises:
-        HTTPException: Se o usuário não for encontrado ou erro no AD.
+        conn = get_connection()
+        try:
+            conn.modify_dn(dn_atual, novo_dn)
+            if conn.result['result'] == 0:
+                return True
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Erro ao mover usuário: {conn.result}"
+                )
+        finally:
+            conn.unbind()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao mover usuário: {e}")
+
+
+def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
+    """
+    Habilita ou desabilita a conta de um usuário no AD.
+    Ao desabilitar, move o usuário para OU=Inativos.
+    Ao habilitar, move o usuário para OU=Ativos.
     """
     dn_usuario = _resolver_dn(login)
     novo_uac = UAC_NORMAL_DESABILITADA if desabilitar else UAC_NORMAL_ATIVO
     acao = "DISABLE_USER" if desabilitar else "ENABLE_USER"
 
+    # Define a OU de destino
+    if desabilitar:
+        ou_destino = "OU=Inativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+    else:
+        ou_destino = "OU=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+
     conn = get_connection()
     try:
+        # 1. Altera o status da conta
         ok = conn.modify(dn_usuario, {"userAccountControl": [(MODIFY_REPLACE, [novo_uac])]})
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao alterar status da conta: {conn.result}")
 
+        # 2. Move o usuário para a OU correta
+        mover_usuario(login, ou_destino)
+
+        # 3. Busca os dados atualizados
         usuario = buscar_usuario(login)
 
-        # Registra a ação
+        # 4. Registra a ação no banco de auditoria
         try:
             from app.audit_service import AuditService
             from app.database import SessionLocal
@@ -414,7 +364,10 @@ def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = 
                 username=operator,
                 action=acao,
                 target_user=login,
-                details={"status": "desabilitado" if desabilitar else "habilitado"},
+                details={
+                    "status": "desabilitado" if desabilitar else "habilitado",
+                    "ou_destino": ou_destino
+                },
                 ip_address=ip_address,
                 user_agent=user_agent,
                 status="SUCCESS"
@@ -431,25 +384,14 @@ def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = 
 def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agent: str = None) -> bool:
     """
     Autentica um usuário no Active Directory e registra a tentativa de login.
-
-    Args:
-        login (str): Nome de usuário.
-        senha (str): Senha do usuário.
-        ip_address (str, optional): IP da origem.
-        user_agent (str, optional): User-Agent.
-
-    Returns:
-        bool: True se autenticado com sucesso, False caso contrário.
     """
     try:
         dn_usuario = _resolver_dn(login)
         conn = get_connection()
         try:
-            # Tenta bind com as credenciais do usuário
             test_conn = get_connection(user=dn_usuario, password=senha)
             test_conn.unbind()
 
-            # Registra login bem-sucedido
             try:
                 from app.audit_service import AuditService
                 from app.database import SessionLocal
@@ -468,7 +410,6 @@ def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agen
             return True
 
         except Exception as e:
-            # Registra falha de login
             try:
                 from app.audit_service import AuditService
                 from app.database import SessionLocal
@@ -494,11 +435,6 @@ def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agen
 def registrar_logout(login: str, ip_address: str = None, user_agent: str = None) -> None:
     """
     Registra o logout de um usuário no banco de auditoria.
-
-    Args:
-        login (str): Nome de usuário.
-        ip_address (str, optional): IP da origem.
-        user_agent (str, optional): User-Agent.
     """
     try:
         from app.audit_service import AuditService
