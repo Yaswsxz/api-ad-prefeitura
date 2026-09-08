@@ -1,9 +1,5 @@
-from app.core.config import settings
+﻿from app.core.config import settings
 
-print("=== DEBUG DAS VARIAVEIS DO .env ===")
-print(f"SERVIDOR: {settings.AD_SERVER}")
-print(f"USUARIO: {settings.AD_BIND_USER}")
-print(f"SENHA: {settings.AD_BIND_PASSWORD}")
-print(f"BASE DN: {settings.AD_BASE_DN}")
-print(f"DOMINIO: {settings.AD_DOMAIN}")
-print("====================================")
+print(f"AD_USER_OU: {settings.AD_USER_OU}")
+print(f"AD_BIND_USER: {settings.AD_BIND_USER}")
+print(f"AD_SERVER: {settings.AD_SERVER}")
