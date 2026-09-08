@@ -28,6 +28,9 @@ Esta API foi desenvolvida para automatizar e centralizar o gerenciamento de usu�
 - Habilitar e desabilitar contas
 - Autenticar usuários no AD
 - Auditoria completa de todas as ações (LGPD)
+- **Logs detalhados para facilitar diagnósticos**
+- **Autenticação com JWT para segurança das rotas**
+- **Testes automatizados para garantir estabilidade**
 
 ---
 
@@ -41,6 +44,9 @@ Esta API foi desenvolvida para automatizar e centralizar o gerenciamento de usu�
 | Autenticação | Login e logout com registro de tentativas |
 | Auditoria Completa | Registro de todas as ações no SQLite |
 | Documentação Automática | Swagger UI e Redoc |
+| **Logs Detalhados** | **Registro de todas as operações em arquivo e console** |
+| **Autenticação JWT** | **Proteção das rotas com token de acesso** |
+| **Testes Automatizados** | **Validação contínua da API com pytest** |
 
 ---
 
@@ -55,6 +61,9 @@ Esta API foi desenvolvida para automatizar e centralizar o gerenciamento de usu�
 | SQLite | - | Banco de dados local (auditoria) |
 | Pydantic | 2.9.2 | Validação de dados |
 | Uvicorn | 0.30.6 | Servidor ASGI |
+| **python-jose** | **3.5.0** | **JWT (autenticação)** |
+| **passlib** | **1.7.4** | **Hash de senhas** |
+| **pytest** | **9.1.1** | **Testes automatizados** |
 
 ---
 
@@ -77,7 +86,8 @@ A API segue o padrão de arquitetura em camadas:
                      ▼
 ┌─────────────────────────────────────────────┐
 │       CAMADA DE INFRAESTRUTURA             │
-│  (core/) - Conexão LDAP, configurações     │
+│  (core/) - Conexão LDAP, configurações,    │
+│            logs, autenticação JWT          │
 └─────────────────────────────────────────────┘
                      │
      ┌───────────────┴───────────────┐
@@ -152,6 +162,12 @@ py -3.11 -m uvicorn app.main:app --reload
 
 A API estará disponível em: http://localhost:8000
 
+### 6. Rodar os testes automatizados
+
+```bash
+py -3.11 -m pytest tests/ -v
+```
+
 ---
 
 ## Endpoints da API
@@ -160,16 +176,17 @@ A API estará disponível em: http://localhost:8000
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| GET | `/usuarios` | Lista todos os usuários |
-| GET | `/usuarios/{login}` | Busca um usuário específico |
-| POST | `/usuarios` | Cria um novo usuário |
-| PUT | `/usuarios/{login}` | Atualiza dados do usuário |
-| DELETE | `/usuarios/{login}` | Remove um usuário |
-| POST | `/usuarios/{login}/trocar-senha` | Troca a senha |
-| POST | `/usuarios/{login}/habilitar` | Ativa a conta |
-| POST | `/usuarios/{login}/desabilitar` | Desativa a conta |
+| GET | `/usuarios` | Lista todos os usuários (protegido por JWT) |
+| GET | `/usuarios/{login}` | Busca um usuário específico (protegido por JWT) |
+| POST | `/usuarios` | Cria um novo usuário (protegido por JWT) |
+| PUT | `/usuarios/{login}` | Atualiza dados do usuário (protegido por JWT) |
+| DELETE | `/usuarios/{login}` | Remove um usuário (protegido por JWT) |
+| POST | `/usuarios/{login}/trocar-senha` | Troca a senha (protegido por JWT) |
+| POST | `/usuarios/{login}/habilitar` | Ativa a conta (protegido por JWT) |
+| POST | `/usuarios/{login}/desabilitar` | Desativa a conta (protegido por JWT) |
 | POST | `/usuarios/auth` | Autentica um usuário |
 | POST | `/usuarios/{login}/logout` | Registra logout |
+| **POST** | **`/usuarios/login`** | **Login e geração de token JWT** |
 
 ### Auditoria (prefixo: `/auditoria`)
 
@@ -206,25 +223,29 @@ Todas as ações realizadas na API são registradas automaticamente no SQLite, g
 ```
 ApiTeste/
 ├── app/
-│   ├── core/               # Configurações e utilidades
-│   │   ├── config.py       # Variáveis de ambiente
-│   │   ├── generators.py   # Geradores de login/senha
-│   │   └── ldap_connection.py  # Conexão com AD
-│   ├── routers/            # Endpoints
-│   │   ├── users.py        # Rotas de usuários
-│   │   └── audit.py        # Rotas de auditoria
-│   ├── schemas/            # Validação de dados
-│   │   └── user.py         # Schemas Pydantic
-│   ├── services/           # Lógica de negócio
-│   │   └── ad_service.py   # Integração com AD
-│   ├── audit_service.py    # Serviço de auditoria
-│   ├── database.py         # Modelos SQLAlchemy
-│   └── main.py             # Ponto de entrada
-├── .env                    # Configurações (não versionar)
-├── .env.example            # Template de configurações
-├── .gitignore              # Arquivos ignorados
-├── README.md               # Documentação
-└── requirements.txt        # Dependências
+│   ├── core/                     # Configurações e utilidades
+│   │   ├── config.py             # Variáveis de ambiente
+│   │   ├── generators.py         # Geradores de login/senha
+│   │   ├── ldap_connection.py    # Conexão com AD
+│   │   ├── auth.py               # Autenticação JWT
+│   │   └── logging_config.py     # Logs detalhados
+│   ├── routers/                  # Endpoints
+│   │   ├── users.py              # Rotas de usuários
+│   │   └── audit.py              # Rotas de auditoria
+│   ├── schemas/                  # Validação de dados
+│   │   └── user.py               # Schemas Pydantic
+│   ├── services/                 # Lógica de negócio
+│   │   └── ad_service.py         # Integração com AD
+│   ├── audit_service.py          # Serviço de auditoria
+│   ├── database.py               # Modelos SQLAlchemy
+│   └── main.py                   # Ponto de entrada
+├── tests/                        # Testes automatizados
+│   └── test_api.py               # Testes da API
+├── .env                          # Configurações (não versionar)
+├── .env.example                  # Template de configurações
+├── .gitignore                    # Arquivos ignorados
+├── README.md                     # Documentação
+└── requirements.txt              # Dependências
 ```
 
 ---
