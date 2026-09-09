@@ -1,14 +1,17 @@
+import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 class Settings(BaseSettings):
     # --- Active Directory ---
-    AD_SERVER: str = "ldap://cegonha.londrina.pr.gov.br"
-    AD_DOMAIN: str = "cegonha.londrina.pr.gov.br"
-    AD_BASE_DN: str = "OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
-    AD_USER_OU: str = "OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
-    AD_BIND_USER: str = "pmldomain\grds1.estag"
-    AD_BIND_PASSWORD: str = "pmldesenvol"
+    AD_SERVER: str = "ldap://192.168.0.1"
+    AD_DOMAIN: str = "prefeitura.local"
+    AD_BASE_DN: str = "DC=prefeitura,DC=local"
+    AD_ATIVOS_BASE: str = os.getenv("AD_ATIVOS_BASE", "")
+    AD_INATIVOS_BASE: str = os.getenv("AD_INATIVOS_BASE", "")
+    AD_USER_OU: str = "OU=Funcionarios,DC=prefeitura,DC=local"
+    AD_BIND_USER: str = "svc_api@prefeitura.local"
+    AD_BIND_PASSWORD: str = ""
 
     # --- Banco de Dados ---
     DATABASE_URL: str = "sqlite:///./ad_audit.db"

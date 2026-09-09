@@ -9,6 +9,11 @@ class UsuarioCreate(BaseModel):
     cargo: Optional[str] = Field(None, example="Analista Administrativo")
     tipo: Optional[str] = Field("efetivo", example="efetivo ou estagiario")
     email: Optional[str] = None  # se não informado, é gerado automaticamente
+    subcontainer: str = Field(
+        ...,
+        example="ContainerA",
+        description="Subpasta dentro de Ativos/Inativos (ex: ContainerA, ContainerB)"
+    )
 
 
 class UsuarioUpdate(BaseModel):

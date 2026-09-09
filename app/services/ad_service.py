@@ -98,10 +98,8 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
     senha = gerar_senha(8)
     nome_completo = f"{dados.primeiro_nome} {dados.ultimo_nome}"
     email = dados.email or f"{login}@{settings.AD_DOMAIN}"
-    
-    # Define a OU de criação (ATIVOS)
-    ou_atual = "OU=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
-    dn = f"CN={nome_completo},{ou_atual}"
+    base_path = f"CN={dados.subcontainer},{settings.AD_ATIVOS_BASE}"
+    dn = f"CN={nome_completo},{base_path}"
 
     conn = get_connection()
     try:
