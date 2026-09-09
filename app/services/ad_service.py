@@ -100,6 +100,9 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
     email = dados.email or f"{login}@{settings.AD_DOMAIN}"
     base_path = f"CN={dados.subcontainer},{settings.AD_ATIVOS_BASE}"
     dn = f"CN={nome_completo},{base_path}"
+    print("### DEBUG - subcontainer recebido:", repr(dados.subcontainer))
+    print("### DEBUG - AD_ATIVOS_BASE:", repr(settings.AD_ATIVOS_BASE))
+    print("### DEBUG - DN final:", repr(dn))
 
     conn = get_connection()
     try:
