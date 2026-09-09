@@ -5,3 +5,5 @@ __pycache__/
 .vscode/
 *.db
 ad_audit.db
+resultado.txt
+app_backup/
