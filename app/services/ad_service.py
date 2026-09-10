@@ -86,9 +86,13 @@ def listar_setores(base: Optional[str] = None) -> list[str]:
         conn.unbind()
 
 
-def listar_usuarios(filtro_nome: str | None = None):
+def listar_usuarios(
+    filtro_nome: str | None = None,
+    ordenar_por: str = "nome",
+    ordem: str = "asc"
+):
     """
-    Retorna lista de todos os usuários do Active Directory.
+    Retorna lista de todos os usuários do Active Directory, com ordenação.
     """
     conn = get_connection()
     try:
@@ -103,7 +107,22 @@ def listar_usuarios(filtro_nome: str | None = None):
             search_scope=SUBTREE,
             attributes=["cn", "sAMAccountName", "mail", "title", "userAccountControl"],
         )
-        return [_entry_to_usuario_out(e) for e in conn.entries]
+
+        usuarios = [_entry_to_usuario_out(e) for e in conn.entries]
+
+        chaves_ordenacao = {
+            "nome": lambda u: (u.nome_completo or "").lower(),
+            "login": lambda u: (u.login or "").lower(),
+            "email": lambda u: (u.email or "").lower(),
+            "cargo": lambda u: (u.cargo or "").lower(),
+            "status": lambda u: (u.ativo, (u.nome_completo or "").lower()),
+        }
+
+        chave = chaves_ordenacao.get(ordenar_por.lower(), chaves_ordenacao["nome"])
+        reverse = ordem.lower() == "desc"
+        usuarios.sort(key=chave, reverse=reverse)
+
+        return usuarios
     finally:
         conn.unbind()
 

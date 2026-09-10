@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
+from enum import Enum
 
 
 class UsuarioCreate(BaseModel):
@@ -41,3 +42,17 @@ class UsuarioOut(BaseModel):
 
 class UsuarioCriadoOut(UsuarioOut):
     senha_gerada: str
+
+class CampoOrdenacao(str, Enum):
+    """Campos disponíveis para ordenação."""
+    NOME = "nome"
+    LOGIN = "login"
+    EMAIL = "email"
+    CARGO = "cargo"
+    STATUS = "status"
+
+
+class Ordem(str, Enum):
+    """Direção da ordenação."""
+    ASC = "asc"
+    DESC = "desc"
