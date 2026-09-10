@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Request, Depends, Body
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut, UsuarioCriadoOut, TrocaSenha, CampoOrdenacao, Ordem
+from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut, UsuarioCriadoOut, TrocaSenha, CampoOrdenacao, Ordem, Setor
 from app.services import ad_service
 from app.database import get_db
 
@@ -81,21 +81,23 @@ def deletar_lote(
     )
 
 
-@router.get("", response_model=List[UsuarioOut], summary="Listar/buscar usuários")
+@router.get("", response_model=List[UsuarioOut], summary="Listar/buscar usuários com filtros")
 def listar_usuarios(
     request: Request,
     nome: Optional[str] = Query(None, description="Filtra por parte do nome"),
-    ordenar_por: CampoOrdenacao = Query(
-        CampoOrdenacao.NOME,
-        description="Campo para ordenação"
-    ),
-    ordem: Ordem = Query(
-        Ordem.ASC,
-        description="Direção da ordenação"
-    )
+    cargo: Optional[str] = Query(None, description="Filtra por parte do cargo (ex: Analista)"),
+    setor: Optional[Setor] = Query(None, description="Filtra por setor exato"),
+    email: Optional[str] = Query(None, description="Filtra por parte do email"),
+    ativo: Optional[bool] = Query(None, description="Filtra por status: true=ativos, false=inativos"),
+    ordenar_por: CampoOrdenacao = Query(CampoOrdenacao.NOME, description="Campo para ordenação"),
+    ordem: Ordem = Query(Ordem.ASC, description="Direção da ordenação")
 ):
     return ad_service.listar_usuarios(
         filtro_nome=nome,
+        filtro_cargo=cargo,
+        filtro_setor=setor.value if setor else None,
+        filtro_email=email,
+        filtro_ativo=ativo,
         ordenar_por=ordenar_por.value,
         ordem=ordem.value
     )
