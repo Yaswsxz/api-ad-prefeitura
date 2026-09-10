@@ -2,8 +2,6 @@
 
 API RESTful desenvolvida para gerenciar usuários no Active Directory da Prefeitura de Londrina, com foco em automação, segurança e auditoria completa.
 
----
-
 ## Índice
 
 - [Sobre o Projeto](#sobre-o-projeto)
@@ -15,12 +13,12 @@ API RESTful desenvolvida para gerenciar usuários no Active Directory da Prefeit
 - [Instalação e Configuração](#instalação-e-configuração)
 - [Endpoints da API](#endpoints-da-api)
 - [Exemplo de Requisição](#exemplo-de-requisição)
+- [Gestão de Setores e Consistência](#gestão-de-setores-e-consistência)
 - [Solução de Problemas (Troubleshooting)](#solução-de-problemas-troubleshooting)
+- [Problemas Conhecidos](#problemas-conhecidos)
 - [Auditoria e LGPD](#auditoria-e-lgpd)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Autora](#autora)
-
----
 
 ## Sobre o Projeto
 
@@ -28,14 +26,12 @@ Esta API foi desenvolvida para automatizar e centralizar o gerenciamento de usu�
 
 - Criar, editar, remover e consultar usuários
 - Trocar senhas (automáticas ou personalizadas)
-- Habilitar e desabilitar contas
+- Habilitar e desabilitar contas, preservando o setor do usuário
+- Transferir usuários entre setores sem alterar o status ativo/inativo
+- Detectar e corrigir inconsistências entre o status real da conta e a pasta onde está armazenada
+- Identificar e remover contas de teste, sempre com revisão manual antes da remoção
 - Autenticar usuários no AD
 - Auditoria completa de todas as ações (LGPD)
-- **Logs detalhados para facilitar diagnósticos**
-- **Autenticação com JWT para segurança das rotas**
-- **Testes automatizados para garantir estabilidade**
-
----
 
 ## Funcionalidades
 
@@ -43,15 +39,16 @@ Esta API foi desenvolvida para automatizar e centralizar o gerenciamento de usu�
 |----------------|-----------|
 | CRUD de Usuários | Criar, listar, buscar, atualizar e remover usuários no AD |
 | Gerenciamento de Senhas | Troca de senha com geração automática |
-| Controle de Contas | Habilitar e desabilitar usuários (move entre containers Ativos/Inativos) |
+| Controle de Contas | Habilitar e desabilitar usuários, preservando o subcontainer (setor) de origem |
+| Transferência de Setor | Move um usuário entre setores sem alterar seu status ativo/inativo |
+| Validação de Setores | Impede criar ou transferir usuário para um setor que não existe no AD |
+| Detecção de Inconsistências | Encontra usuários cujo status real diverge da pasta onde estão guardados |
+| Correção em Lote | Corrige automaticamente as inconsistências detectadas |
+| Identificação de Contas de Teste | Sinaliza contas suspeitas de serem teste (nunca remove sozinha) |
+| Remoção em Lote | Remove apenas os logins explicitamente confirmados pelo operador |
 | Autenticação | Login e logout com registro de tentativas |
-| Auditoria Completa | Registro de todas as ações no SQLite |
+| Auditoria Completa | Registro de todas as ações no SQLite, incluindo CPF e tipo de vínculo |
 | Documentação Automática | Swagger UI e Redoc |
-| **Logs Detalhados** | **Registro de todas as operações em arquivo e console** |
-| **Autenticação JWT** | **Proteção das rotas com token de acesso** |
-| **Testes Automatizados** | **Validação contínua da API com pytest** |
-
----
 
 ## Tecnologias Utilizadas
 
@@ -64,12 +61,10 @@ Esta API foi desenvolvida para automatizar e centralizar o gerenciamento de usu�
 | SQLite | - | Banco de dados local (auditoria) |
 | Pydantic | 2.9.2 | Validação de dados |
 | Uvicorn | 0.30.6 | Servidor ASGI |
-| **python-jose** | **3.5.0** | **JWT (autenticação)** |
-| **passlib** | **1.7.4** | **Hash de senhas** |
-| **pytest** | **9.1.1** | **Testes automatizados** |
-| **pycryptodome** | **-** | **Suporte a hash MD4/NTLM exigido pelo `ldap3` em builds recentes do Python (ver Troubleshooting)** |
-
----
+| python-jose | 3.5.0 | JWT (autenticação) |
+| passlib | 1.7.4 | Hash de senhas |
+| pytest | 9.1.1 | Testes automatizados |
+| pycryptodome | - | Suporte a hash MD4/NTLM exigido pelo `ldap3` em builds recentes do Python (ver Troubleshooting) |
 
 ## Arquitetura
 
@@ -103,8 +98,6 @@ A API segue o padrão de arquitetura em camadas:
 └──────────────────┘     └──────────────────────┘
 ```
 
----
-
 ## Estrutura do Active Directory
 
 A API opera dentro da seguinte hierarquia no AD da prefeitura (domínio `DC=londrina,DC=pr,DC=gov,DC=br`):
@@ -131,29 +124,8 @@ OU=DESENVOL
 **Pontos importantes:**
 
 - `Ativos`, `Inativos` e os subsetores (`CODEL`, `CMTU`, etc.) são **containers** (`CN=`), **não** Organizational Units (`OU=`). Usar `OU=` no lugar de `CN=` para esses objetos gera erro `noSuchObject`.
-- Ao criar um usuário, o campo `subcontainer` do payload **precisa** ser um dos nomes reais listados acima — qualquer outro valor (inclusive o exemplo padrão do Swagger, `"ContainerA"`) causa falha na criação.
-- Para investigar a estrutura real do AD a qualquer momento (ex: se novos subsetores forem criados), use um script simples com `ldap3`:
-
-```python
-from ldap3 import Server, Connection, SUBTREE
-
-server = Server("cegonha.londrina.pr.gov.br")
-conn = Connection(server, user="pmldomain\\<usuario_servico>", password="<senha>", auto_bind=True)
-
-conn.search(
-    search_base="OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br",
-    search_filter="(objectClass=*)",
-    search_scope=SUBTREE,
-    attributes=["objectClass", "name"],
-)
-
-for entry in conn.entries:
-    print(entry.entry_dn, "| classes:", list(entry.objectClass))
-
-conn.unbind()
-```
-
----
+- Ao criar ou transferir um usuário, o campo `subcontainer`/`novo_subcontainer` **precisa** ser um dos nomes reais existentes no AD. A API valida isso automaticamente contra o AD em tempo real (não depende de lista fixa no código) — consulte `GET /usuarios/setores` para ver os valores aceitos no momento.
+- Novos setores criados diretamente no AD já são reconhecidos pela API automaticamente, sem precisar alterar código.
 
 ## Pré-requisitos
 
@@ -165,8 +137,6 @@ Antes de começar, você vai precisar ter instalado:
 - Git (para clonar o repositório)
 
 ⚠️ **Importante:** Este projeto é compatível e foi testado com **Python 3.11**. Para evitar erros de instalação (como do `pydantic-core`), utilize a versão 3.11 no comando `py -3.11`.
-
----
 
 ## Instalação e Configuração
 
@@ -217,7 +187,7 @@ AD_BIND_PASSWORD=sua_senha
 DATABASE_URL=sqlite:///./ad_audit.db
 ```
 
-**Atenção:** `AD_BASE_DN`, `AD_ATIVOS_BASE` e `AD_INATIVOS_BASE` precisam refletir exatamente a hierarquia real do AD (ver [Estrutura do Active Directory](#estrutura-do-active-directory)). Um caminho incorreto ou incompleto causa erro `noSuchObject` mesmo que o restante da configuração esteja certo.
+**Atenção:** `AD_BASE_DN`, `AD_ATIVOS_BASE` e `AD_INATIVOS_BASE` precisam refletir exatamente a hierarquia real do AD (ver [Estrutura do Active Directory](#estrutura-do-active-directory)). Um caminho incorreto ou incompleto causa erro `noSuchObject` mesmo que o restante da configuração esteja correto.
 
 ### 5. Execute a API (sempre com Python 3.11)
 
@@ -233,25 +203,28 @@ A API estará disponível em: http://localhost:8000
 py -3.11 -m pytest tests/ -v
 ```
 
----
-
 ## Endpoints da API
 
 ### Usuários (prefixo: `/usuarios`)
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| GET | `/usuarios` | Lista todos os usuários (protegido por JWT) |
-| GET | `/usuarios/{login}` | Busca um usuário específico (protegido por JWT) |
-| POST | `/usuarios` | Cria um novo usuário (protegido por JWT) |
-| PUT | `/usuarios/{login}` | Atualiza dados do usuário (protegido por JWT) |
-| DELETE | `/usuarios/{login}` | Remove um usuário (protegido por JWT) |
-| POST | `/usuarios/{login}/trocar-senha` | Troca a senha (protegido por JWT) |
-| POST | `/usuarios/{login}/habilitar` | Ativa a conta (protegido por JWT) |
-| POST | `/usuarios/{login}/desabilitar` | Desativa a conta (protegido por JWT) |
-| POST | `/usuarios/auth` | Autentica um usuário |
+| GET | `/usuarios/setores` | Lista os setores (subcontainers) reais existentes dentro de Ativos |
+| GET | `/usuarios/inconsistencias` | Detecta usuários com status divergente da pasta onde estão |
+| POST | `/usuarios/inconsistencias/corrigir` | Corrige automaticamente as inconsistências detectadas |
+| GET | `/usuarios/candidatos-teste` | Sinaliza possíveis contas de teste (não remove nada) |
+| POST | `/usuarios/deletar-lote` | Remove apenas os logins explicitamente informados |
+| GET | `/usuarios` | Lista/busca usuários |
+| GET | `/usuarios/{login}` | Consulta um usuário pelo login |
+| POST | `/usuarios` | Cria um novo usuário |
+| PUT | `/usuarios/{login}` | Atualiza dados do usuário (cargo, tipo, email, telefone) |
+| DELETE | `/usuarios/{login}` | Remove um usuário do AD |
+| POST | `/usuarios/{login}/trocar-senha` | Troca a senha de um usuário |
+| POST | `/usuarios/{login}/desabilitar` | Desativa a conta e move para Inativos |
+| POST | `/usuarios/{login}/habilitar` | Reativa a conta e move para Ativos |
+| POST | `/usuarios/{login}/transferir-setor` | Move o usuário para outro setor, mantendo o status atual |
+| POST | `/usuarios/auth` | Autentica um usuário no AD |
 | POST | `/usuarios/{login}/logout` | Registra logout |
-| **POST** | **`/usuarios/login`** | **Login e geração de token JWT** |
 
 ### Auditoria (prefixo: `/auditoria`)
 
@@ -266,8 +239,6 @@ py -3.11 -m pytest tests/ -v
 
 - Swagger UI: http://localhost:8000/docs
 - Redoc: http://localhost:8000/redoc
-
----
 
 ## Exemplo de Requisição
 
@@ -286,7 +257,9 @@ py -3.11 -m pytest tests/ -v
 ```
 
 **Campos obrigatórios:** `primeiro_nome`, `ultimo_nome`, `subcontainer`.
-`subcontainer` deve ser um dos setores reais existentes no AD (ver [Estrutura do Active Directory](#estrutura-do-active-directory)) — usar um valor inexistente (como o exemplo padrão do Swagger, `"ContainerA"`) resulta em erro `noSuchObject`.
+`subcontainer` deve ser um dos setores reais existentes no AD — consulte `GET /usuarios/setores` para a lista atualizada. Um valor inexistente (como o placeholder padrão do Swagger, `"ContainerA"`) resulta em erro `422` antes mesmo de tentar criar o usuário.
+
+`tipo` (`efetivo`/`estagiario`) é salvo permanentemente no cadastro (atributo `description` no AD) e pode ser consultado ou atualizado depois. `cpf` não é salvo no AD, mas fica registrado no histórico de auditoria da criação.
 
 **Resposta esperada (201):**
 
@@ -296,57 +269,98 @@ py -3.11 -m pytest tests/ -v
   "nome_completo": "Joao Silva",
   "email": "joao.silva@londrina.pr.gov.br",
   "cargo": "Analista Administrativo",
+  "tipo": "efetivo",
   "ativo": false,
   "distinguished_name": "CN=Joao Silva,CN=CODEL,CN=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br",
   "senha_gerada": "SenhaGerada123!"
 }
 ```
 
-> Novos usuários são criados com a conta **desabilitada** por padrão (`ativo: false`), e habilitados posteriormente pelo endpoint `/usuarios/{login}/habilitar`.
+> Novos usuários são criados com a conta **desabilitada** por padrão (`ativo: false`).
 
----
+## Gestão de Setores e Consistência
+
+### Transferir usuário entre setores
+
+`POST /usuarios/{login}/transferir-setor?novo_subcontainer=Saude` move o usuário para outro setor sem alterar seu status atual (quem está em Ativos permanece em Ativos, quem está em Inativos permanece em Inativos). A API identifica sozinha em qual dos dois o usuário está hoje.
+
+### Detectar e corrigir inconsistências
+
+Um usuário é considerado inconsistente quando o status real da conta (`userAccountControl`) não bate com a pasta onde está guardado — por exemplo, uma conta desabilitada que continua fisicamente dentro de `Ativos`.
+
+```
+GET  /usuarios/inconsistencias           → lista os casos encontrados
+POST /usuarios/inconsistencias/corrigir  → move cada um para a pasta correta
+```
+
+### Identificar e remover contas de teste
+
+Esse fluxo é sempre em duas etapas separadas — a API nunca decide sozinha o que apagar:
+
+```
+GET  /usuarios/candidatos-teste  → sugere contas suspeitas (email placeholder "string",
+                                     nome/login contendo "teste"/"test")
+POST /usuarios/deletar-lote      → remove SOMENTE os logins que você revisou e confirmou
+```
+
+```json
+{
+  "logins": ["usuario.teste", "exemplo.silva"]
+}
+```
 
 ## Solução de Problemas (Troubleshooting)
 
 ### Erro: `ValueError: unsupported hash type MD4`
 
-**Causa:** o `ldap3` usa autenticação NTLM, que depende do algoritmo MD4. Builds recentes do Python/OpenSSL removeram suporte nativo a MD4 por ser considerado obsoleto, e a biblioteca de fallback (`pycryptodome`) não está instalada.
+**Causa:** o `ldap3` usa autenticação NTLM, que depende do algoritmo MD4. Builds recentes do Python/OpenSSL removeram suporte nativo a MD4, e a biblioteca de fallback (`pycryptodome`) não está instalada.
 
 **Solução:**
 ```bash
 pip install pycryptodome
 ```
-Reinicie o servidor (`Ctrl+C` e rode `uvicorn` de novo) após instalar.
+Reinicie o servidor após instalar.
 
 ### Erro: `{'result': 32, 'description': 'noSuchObject', ...}`
 
-**Causa:** o caminho (DN) usado na operação não existe no AD. As causas mais comuns:
-- Variáveis do `.env` (`AD_BASE_DN`, `AD_ATIVOS_BASE`, `AD_INATIVOS_BASE`) com caminho incompleto, na ordem errada, ou usando `OU=` em vez de `CN=` para containers.
-- Campo `subcontainer` não enviado no request, ou enviado com um valor que não existe no AD (ex: o placeholder `"ContainerA"` do Swagger).
+**Causa:** o caminho (DN) usado na operação não existe no AD — variáveis do `.env` incompletas/na ordem errada, `OU=` usado no lugar de `CN=`, ou `subcontainer` inexistente.
 
-**Como investigar:** rode o script de listagem da árvore do AD (ver [Estrutura do Active Directory](#estrutura-do-active-directory)) para confirmar os caminhos reais e comparar com o `.env`.
+**Como investigar:** consulte `GET /usuarios/setores`, ou rode o script de listagem da árvore do AD (ver [Estrutura do Active Directory](#estrutura-do-active-directory)).
+
+### Erro: `{'result': 64, 'description': 'namingViolation', ...}` ao mover/desabilitar/habilitar usuário
+
+**Causa (corrigida):** a função de mover usuário usava `conn.modify_dn(dn_atual, novo_dn_completo)`, passando o caminho inteiro no lugar onde o `ldap3` espera apenas o novo nome (RDN). O AD tentava interpretar o caminho completo como um único atributo de nome e recusava a operação.
+
+**Solução aplicada:** o `modify_dn` agora usa o parâmetro `new_superior` para indicar o destino, e passa somente `CN={nome}` como novo RDN. Essa correção afeta todas as operações que movem usuário: desabilitar, habilitar, transferir setor e corrigir inconsistências.
 
 ### A API não reflete mudanças no código, mesmo com `--reload`
 
-**Causa:** processos antigos do `uvicorn` continuam rodando em segundo plano e ocupando a porta 8000, fazendo o Swagger conversar com uma versão desatualizada do servidor.
+**Causa:** processos antigos do `uvicorn` continuam rodando em segundo plano na porta 8000.
 
 **Como verificar:**
 ```powershell
 netstat -ano | findstr :8000
 ```
-Se aparecer mais de um processo (`LISTENING`), há instâncias duplicadas.
 
 **Solução:**
 ```powershell
 taskkill /F /IM python.exe
 ```
-Depois, confirme que a porta está livre (`netstat -ano | findstr :8000` deve retornar vazio) e suba o servidor novamente com um único terminal.
+Confirme que a porta está livre e suba o servidor novamente em um único terminal.
 
 ### O erro retornado é genérico (`"Internal Server Error"`, sem detalhes)
 
-Isso indica uma exceção não tratada pelo código (fora do bloco `except LDAPException`). Consulte o **traceback completo no terminal onde o `uvicorn` está rodando** — ele aponta o arquivo e a linha exata da falha.
+Indica uma exceção não tratada pelo código. Consulte o **traceback completo no terminal onde o `uvicorn` está rodando**.
 
----
+## Problemas Conhecidos
+
+### `habilitar` e `trocar-senha` retornam `unwillingToPerform` (código 53)
+
+Ao reabilitar uma conta ou trocar a senha de um usuário já existente, o AD recusa a operação com `{'result': 53, 'description': 'unwillingToPerform', ...}`, mesmo com dados válidos. **Desabilitar** e **criar usuário** (que também define senha) funcionam normalmente com a mesma conexão e o mesmo usuário de serviço.
+
+**Hipótese mais provável:** a conta de serviço configurada em `AD_BIND_USER` pode ter permissão delegada no AD para desabilitar/mover contas, mas não para reabilitá-las ou redefinir senha de contas existentes — uma restrição de segurança comum, definida do lado do administrador do domínio, não do código da API.
+
+**Próximo passo:** confirmar com o administrador do AD se a conta de serviço tem as permissões delegadas de **"Reset Password"** e **"Enable/Disable Account"** completas na OU `PML`.
 
 ## Auditoria e LGPD
 
@@ -360,7 +374,7 @@ Todas as ações realizadas na API são registradas automaticamente no SQLite, g
 | De onde | `ip_address` + `user_agent` |
 | Sucesso ou falha | `status` (SUCCESS/FAILED) |
 
----
+O CPF informado na criação de um usuário é registrado apenas no banco de auditoria local (`ad_audit.db`, presente no `.gitignore`), nunca impresso em log de console ou incluído em respostas de erro. O acesso ao servidor onde a API roda, e a qualquer endpoint de auditoria, deve ser restrito a pessoal autorizado.
 
 ## Estrutura do Projeto
 
@@ -383,17 +397,20 @@ ApiTeste/
 │   ├── audit_service.py          # Serviço de auditoria
 │   ├── database.py               # Modelos SQLAlchemy
 │   └── main.py                   # Ponto de entrada
-├── scripts/                      # Scripts auxiliares (investigação/diagnóstico do AD)
-├── tests/                        # Testes automatizados
-│   └── test_api.py               # Testes da API
+├── scripts/                      # Scripts auxiliares de investigação/diagnóstico do AD
+│   ├── listar_ous.py
+│   ├── criar_usuario_manual.py
+│   ├── verificar_env.py
+│   └── migrar_users_para_ativos.py
+├── tests/                        # Testes automatizados (pytest)
+│   ├── test_api.py
+│   └── test_ad.py
 ├── .env                          # Configurações (não versionar)
 ├── .env.example                  # Template de configurações
 ├── .gitignore                    # Arquivos ignorados
 ├── README.md                     # Documentação
 └── requirements.txt              # Dependências
 ```
-
----
 
 ## Autora
 
@@ -402,8 +419,6 @@ E-mail: yasmincarvalho.dev06@gmail.com
 GitHub: [Yaswsxz](https://github.com/Yaswsxz)
 
 *Estagiária de Desenvolvimento - Prefeitura Municipal de Londrina*
-
----
 
 ## Licença
 
