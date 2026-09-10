@@ -11,8 +11,8 @@ class UsuarioCreate(BaseModel):
     email: Optional[str] = None  # se não informado, é gerado automaticamente
     subcontainer: str = Field(
         ...,
-        example="ContainerA",
-        description="Subpasta dentro de Ativos/Inativos (ex: ContainerA, ContainerB)"
+        example="CODEL",
+        description="Subpasta dentro de Ativos/Inativos (setores válidos: CODEL, CMTU, Planejamento, Ouvidoria, Saude, Sercontel)"
     )
 
 
@@ -35,6 +35,7 @@ class UsuarioOut(BaseModel):
     nome_completo: str
     email: Optional[str] = None
     cargo: Optional[str] = None
+    tipo: Optional[str] = None
     ativo: bool
     distinguished_name: str
 

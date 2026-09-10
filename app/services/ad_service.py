@@ -25,6 +25,7 @@ def _entry_to_usuario_out(entry) -> UsuarioOut:
         nome_completo=str(entry.cn.value),
         email=str(entry.mail.value) if entry.mail.value else None,
         cargo=str(entry.title.value) if entry.title.value else None,
+        tipo=str(entry.description.value) if entry.description.value else None,
         ativo=ativo,
         distinguished_name=str(entry.entry_dn),
     )
@@ -101,7 +102,7 @@ def listar_usuarios(filtro_nome: str | None = None):
             search_base=settings.AD_BASE_DN,
             search_filter=ldap_filter,
             search_scope=SUBTREE,
-            attributes=["cn", "sAMAccountName", "mail", "title", "userAccountControl"],
+            attributes=["cn", "sAMAccountName", "mail", "title", "description", "userAccountControl"],
         )
         return [_entry_to_usuario_out(e) for e in conn.entries]
     finally:
@@ -118,7 +119,7 @@ def buscar_usuario(login: str) -> UsuarioOut:
             search_base=settings.AD_BASE_DN,
             search_filter=f"(&(objectClass=user)(sAMAccountName={login}))",
             search_scope=SUBTREE,
-            attributes=["cn", "sAMAccountName", "mail", "title", "userAccountControl"],
+            attributes=["cn", "sAMAccountName", "mail", "title", "description", "userAccountControl"],
         )
         if not conn.entries:
             raise HTTPException(status_code=404, detail="Usuário não encontrado no AD")
@@ -172,6 +173,8 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
         }
         if dados.cargo:
             attrs["title"] = dados.cargo
+        if dados.tipo:
+            attrs["description"] = dados.tipo
 
         ok = conn.add(dn, attributes=attrs)
         if not ok:
@@ -198,7 +201,8 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
                 details={
                     "nome_completo": nome_completo,
                     "email": email,
-                    "cargo": dados.cargo
+                    "cargo": dados.cargo,
+                    "cpf": dados.cpf,
                 },
                 ip_address=ip_address,
                 user_agent=user_agent,
@@ -225,6 +229,8 @@ def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, 
 
     if dados.cargo is not None:
         mudancas["title"] = [(MODIFY_REPLACE, [dados.cargo])]
+    if dados.tipo is not None:
+        mudancas["description"] = [(MODIFY_REPLACE, [dados.tipo])]
     if dados.email is not None:
         mudancas["mail"] = [(MODIFY_REPLACE, [dados.email])]
     if dados.telefone is not None:
@@ -339,7 +345,7 @@ def mover_usuario(login: str, nova_ou: str) -> bool:
 
     Args:
         login (str): Login do usuário.
-        nova_ou (str): Caminho completo do destino.
+        nova_ou (str): Caminho completo do NOVO PAI (destino) do usuário.
                        Ex: "CN=Inativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
                        ou "CN=Saude,CN=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
 
@@ -350,11 +356,14 @@ def mover_usuario(login: str, nova_ou: str) -> bool:
         dn_atual = _resolver_dn(login)
         usuario = buscar_usuario(login)
         nome_completo = usuario.nome_completo
-        novo_dn = f"CN={nome_completo},{nova_ou}"
+        novo_rdn = f"CN={nome_completo}"  # modify_dn espera só o NOVO NOME aqui, não o caminho inteiro
 
         conn = get_connection()
         try:
-            conn.modify_dn(dn_atual, novo_dn)
+            # new_superior é o parâmetro correto para mudar de "pasta" (pai) no AD.
+            # Passar o caminho completo como segundo argumento (sem new_superior)
+            # causa erro de namingViolation, pois o AD tenta interpretar tudo como um nome só.
+            conn.modify_dn(dn_atual, novo_rdn, new_superior=nova_ou)
             if conn.result['result'] == 0:
                 return True
             else:
@@ -622,107 +631,28 @@ def deletar_usuarios_em_lote(logins: list[str], ip_address: str = None, user_age
 
     return {"removidos": sucesso, "erros": erros, "detalhes": resultados}
 
-def identificar_candidatos_teste() -> list[dict]:
-    """
-    Varre usuários do AD e sinaliza contas que aparentam ser de teste,
-    com base em padrões comuns (email placeholder 'string', nome/login
-    contendo 'teste'/'test'). NÃO deleta nada — apenas lista candidatos
-    para revisão manual antes de qualquer remoção.
-    """
-    conn = get_connection()
-    try:
-        base = "OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
-        conn.search(
-            search_base=base,
-            search_filter="(&(objectClass=user)(objectCategory=person))",
-            search_scope=SUBTREE,
-            attributes=["cn", "sAMAccountName", "mail", "userAccountControl"],
-        )
 
-        candidatos = []
-        for entry in conn.entries:
-            cn = str(entry.cn.value) if entry.cn.value else ""
-            login = str(entry.sAMAccountName.value) if entry.sAMAccountName.value else ""
-            mail = str(entry.mail.value) if entry.mail.value else ""
-
-            motivos = []
-            if mail.strip().lower() == "string":
-                motivos.append("email é o placeholder padrão 'string' do Swagger")
-            if "teste" in cn.lower() or "teste" in login.lower():
-                motivos.append("nome/login contém 'teste'")
-            if "test" in cn.lower() or "test" in login.lower():
-                motivos.append("nome/login contém 'test'")
-
-            if motivos:
-                candidatos.append({
-                    "login": login,
-                    "nome": cn,
-                    "email": mail,
-                    "motivos": motivos,
-                })
-
-        return candidatos
-    finally:
-        conn.unbind()
-
-
-def deletar_usuarios_em_lote(logins: list[str], ip_address: str = None, user_agent: str = None, operator: str = "system") -> dict:
-    """
-    Remove uma lista específica de usuários do AD. Requer que os logins
-    sejam informados explicitamente pelo chamador — nunca deleta com base
-    em heurística automática. Garante que uma pessoa revisou e confirmou
-    a lista antes de qualquer remoção acontecer de fato.
-    """
-    resultados = []
-    sucesso = 0
-    erros = 0
-
-    for login in logins:
-        try:
-            remover_usuario(login, ip_address=ip_address, user_agent=user_agent, operator=operator)
-            resultados.append({"login": login, "status": "REMOVIDO"})
-            sucesso += 1
-        except HTTPException as e:
-            resultados.append({"login": login, "status": f"ERRO: {e.detail}"})
-            erros += 1
-        except Exception as e:
-            resultados.append({"login": login, "status": f"ERRO: {e}"})
-            erros += 1
-
-    try:
-        from app.audit_service import AuditService
-        from app.database import SessionLocal
-        db = SessionLocal()
-        audit = AuditService(db)
-        audit.log_activity(
-            username=operator,
-            action="DELETE_BATCH",
-            target_user="multiplos",
-            details={"logins": logins, "removidos": sucesso, "erros": erros, "detalhes": resultados},
-            ip_address=ip_address,
-            user_agent=user_agent,
-            status="SUCCESS" if erros == 0 else "PARTIAL"
-        )
-        db.close()
-    except Exception as e:
-        print(f"Erro ao registrar auditoria: {e}")
-
-    return {"removidos": sucesso, "erros": erros, "detalhes": resultados}
 def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
     """
     Habilita ou desabilita a conta de um usuário no AD.
-    Ao desabilitar, move o usuário para OU=Inativos.
-    Ao habilitar, move o usuário para OU=Ativos.
+    Ao desabilitar, move o usuário para dentro de Inativos, preservando
+    o mesmo subcontainer (setor) em que ele já estava.
+    Ao habilitar, faz o mesmo movimento de volta para Ativos.
     """
     dn_usuario = _resolver_dn(login)
     novo_uac = UAC_NORMAL_DESABILITADA if desabilitar else UAC_NORMAL_ATIVO
     acao = "DISABLE_USER" if desabilitar else "ENABLE_USER"
 
-    # Define a OU de destino
-    if desabilitar:
-        ou_destino = "OU=Inativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+    # Descobre o subcontainer atual (ex: CODEL) a partir do DN do usuário,
+    # para preservar o setor dele ao mover entre Ativos/Inativos.
+    partes = dn_usuario.split(",")
+    subcontainer_atual = partes[1].replace("CN=", "") if len(partes) > 1 else None
+
+    base_destino = settings.AD_INATIVOS_BASE if desabilitar else settings.AD_ATIVOS_BASE
+    if subcontainer_atual:
+        ou_destino = f"CN={subcontainer_atual},{base_destino}"
     else:
-        ou_destino = "OU=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+        ou_destino = base_destino
 
     conn = get_connection()
     try:
