@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Request, Depends
+from fastapi import APIRouter, Query, Request, Depends, Body
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,78 @@ from app.services import ad_service
 from app.database import get_db
 
 router = APIRouter(prefix="/usuarios", tags=["Usuários"])
+
+
+@router.get("/setores", summary="Listar setores válidos (subcontainers) dentro de Ativos")
+def get_setores():
+    """
+    Retorna a lista de setores reais existentes no AD (ex: CODEL, CMTU, Planejamento...).
+    Use este endpoint para saber quais valores são aceitos no campo 'subcontainer'
+    ao criar ou transferir um usuário.
+    """
+    return {"setores": ad_service.listar_setores()}
+
+
+@router.get("/inconsistencias", summary="Detectar usuários com status divergente da pasta onde estão")
+def get_inconsistencias():
+    """
+    Lista usuários onde o status real da conta (habilitada/desabilitada)
+    não bate com a pasta (Ativos/Inativos) onde estão guardados no AD.
+    """
+    return {"inconsistencias": ad_service.detectar_inconsistencias()}
+
+
+@router.post("/inconsistencias/corrigir", summary="Corrigir automaticamente usuários com status divergente")
+def corrigir_inconsistencias_endpoint(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Move automaticamente cada usuário inconsistente para a pasta certa
+    (Ativos ou Inativos), de acordo com o status real da conta.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    operator = "system"  # Substituir por usuário autenticado via JWT
+
+    return ad_service.corrigir_inconsistencias(
+        ip_address=client_ip,
+        user_agent=user_agent,
+        operator=operator
+    )
+
+
+@router.get("/candidatos-teste", summary="Identificar possíveis contas de teste no AD")
+def get_candidatos_teste():
+    """
+    Sinaliza contas que aparentam ser de teste (email placeholder 'string',
+    nome/login contendo 'teste'/'test'). NÃO remove nada — apenas lista
+    candidatos para você revisar antes de decidir o que apagar.
+    """
+    return {"candidatos": ad_service.identificar_candidatos_teste()}
+
+
+@router.post("/deletar-lote", summary="Remover uma lista específica de usuários")
+def deletar_lote(
+    request: Request,
+    logins: List[str] = Body(..., embed=True, description="Lista de logins a remover, revisada manualmente"),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove os usuários cujos logins forem informados explicitamente.
+    Use GET /usuarios/candidatos-teste para identificar candidatos,
+    revise a lista, e só então chame este endpoint com os logins escolhidos.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    operator = "system"  # Substituir por usuário autenticado via JWT
+
+    return ad_service.deletar_usuarios_em_lote(
+        logins,
+        ip_address=client_ip,
+        user_agent=user_agent,
+        operator=operator
+    )
 
 
 @router.get("", response_model=List[UsuarioOut], summary="Listar/buscar usuários")
@@ -31,7 +103,7 @@ def criar_usuario(
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     operator = dados.primeiro_nome  # ou use um usuário autenticado via JWT
-    
+
     return ad_service.criar_usuario(
         dados,
         ip_address=client_ip,
@@ -50,7 +122,7 @@ def atualizar_usuario(
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     operator = "system"  # Substituir por usuário autenticado via JWT
-    
+
     return ad_service.atualizar_usuario(
         login,
         dados,
@@ -69,7 +141,7 @@ def remover_usuario(
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     operator = "system"  # Substituir por usuário autenticado via JWT
-    
+
     ad_service.remover_usuario(
         login,
         ip_address=client_ip,
@@ -89,7 +161,7 @@ def trocar_senha(
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     operator = login  # O próprio usuário está trocando a senha
-    
+
     senha = ad_service.trocar_senha(
         login,
         dados.nova_senha,
@@ -109,7 +181,7 @@ def desabilitar_usuario(
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     operator = "system"  # Substituir por usuário autenticado via JWT
-    
+
     return ad_service.desabilitar_usuario(
         login,
         desabilitar=True,
@@ -128,7 +200,7 @@ def habilitar_usuario(
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     operator = "system"  # Substituir por usuário autenticado via JWT
-    
+
     return ad_service.desabilitar_usuario(
         login,
         desabilitar=False,
@@ -138,7 +210,31 @@ def habilitar_usuario(
     )
 
 
-# 🔐 NOVO: Endpoint de autenticação
+@router.post("/{login}/transferir-setor", response_model=UsuarioOut, summary="Transferir usuário para outro setor")
+def transferir_setor(
+    request: Request,
+    login: str,
+    novo_subcontainer: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Move o usuário para outro subcontainer (setor), mantendo o mesmo status
+    (Ativos permanece Ativos, Inativos permanece Inativos).
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    operator = "system"  # Substituir por usuário autenticado via JWT
+
+    return ad_service.transferir_usuario_setor(
+        login,
+        novo_subcontainer,
+        ip_address=client_ip,
+        user_agent=user_agent,
+        operator=operator
+    )
+
+
+# NOVO: Endpoint de autenticação
 @router.post("/auth", summary="Autenticar usuário no AD")
 def autenticar_usuario(
     request: Request,
@@ -148,14 +244,14 @@ def autenticar_usuario(
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    
+
     success = ad_service.autenticar_usuario(
         login,
         senha,
         ip_address=client_ip,
         user_agent=user_agent
     )
-    
+
     if success:
         return {"message": "Autenticado com sucesso", "success": True}
     else:
@@ -163,7 +259,7 @@ def autenticar_usuario(
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
 
-# 🔐 NOVO: Endpoint de logout
+# NOVO: Endpoint de logout
 @router.post("/{login}/logout", summary="Registrar logout do usuário")
 def logout_usuario(
     request: Request,
@@ -172,72 +268,11 @@ def logout_usuario(
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    
+
     ad_service.registrar_logout(
         login,
         ip_address=client_ip,
         user_agent=user_agent
     )
-    
+
     return {"message": f"Logout registrado para {login}"}
-
-from pydantic import BaseModel, Field
-from typing import Optional
-
-
-class UsuarioCreate(BaseModel):
-    primeiro_nome: str = Field(..., example="Joao")
-    ultimo_nome: str = Field(..., example="Silva")
-    cpf: Optional[str] = Field(None, example="12345678900")
-    cargo: Optional[str] = Field(None, example="Analista Administrativo")
-    tipo: Optional[str] = Field("efetivo", example="efetivo ou estagiario")
-    email: Optional[str] = None
-
-
-class UsuarioUpdate(BaseModel):
-    cargo: Optional[str] = None
-    tipo: Optional[str] = None
-    email: Optional[str] = None
-    telefone: Optional[str] = None
-
-
-class TrocaSenha(BaseModel):
-    nova_senha: Optional[str] = Field(
-        None, description="Se não informada, uma senha aleatória é gerada"
-    )
-    forcar_troca_no_proximo_login: bool = True
-
-
-class UsuarioOut(BaseModel):
-    login: str
-    nome_completo: str
-    email: Optional[str] = None
-    cargo: Optional[str] = None
-    ativo: bool
-    distinguished_name: str
-
-
-class UsuarioCriadoOut(UsuarioOut):
-    senha_gerada: str
-
-
-# 🔐 NOVOS SCHEMAS PARA AUDITORIA
-class LoginHistoryResponse(BaseModel):
-    id: int
-    username: str
-    event_type: str  # 'login' ou 'logout'
-    timestamp: str
-    ip_address: Optional[str]
-    success: bool
-    error_message: Optional[str]
-
-
-class ActivityHistoryResponse(BaseModel):
-    id: int
-    username: str
-    action: str
-    target_user: Optional[str]
-    details: Optional[str]
-    timestamp: str
-    ip_address: Optional[str]
-    status: str
