@@ -1,12 +1,76 @@
-from fastapi import APIRouter, Query, Request, Depends, Body
+from datetime import timedelta
+from fastapi import APIRouter, Query, Request, Depends, Body, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut, UsuarioCriadoOut, TrocaSenha
 from app.services import ad_service
 from app.database import get_db
+from app.core.auth import criar_token_acesso, get_current_user
+from app.core.config import settings
 
-router = APIRouter(prefix="/usuarios", tags=["Usuários"])
+# Rotas públicas: não exigem token, pois são o próprio ponto de entrada
+# para se autenticar e obter um.
+public_router = APIRouter(prefix="/usuarios", tags=["Usuários"])
+
+# Rotas protegidas: qualquer chamada exige um token JWT válido no header
+# Authorization: Bearer <token>. Sem token válido, a API responde 401
+# antes mesmo de a função da rota ser executada.
+router = APIRouter(prefix="/usuarios", tags=["Usuários"], dependencies=[Depends(get_current_user)])
+
+
+@public_router.post("/login", summary="Login e geração de token JWT")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    Autentica um usuário no Active Directory usando login e senha,
+    e retorna um token JWT para uso nos demais endpoints (protegidos).
+    Envie o token no header: Authorization: Bearer <access_token>
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    success = ad_service.autenticar_usuario(
+        form_data.username,
+        form_data.password,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    if not success:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+
+    token = criar_token_acesso(
+        data={"sub": form_data.username},
+        expires_delta=timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@public_router.post("/auth", summary="Autenticar usuário no AD (sem gerar token)")
+def autenticar_usuario(
+    request: Request,
+    login: str,
+    senha: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Verifica se um login/senha são válidos no AD, sem gerar token.
+    Para obter um token de acesso, use POST /usuarios/login.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    success = ad_service.autenticar_usuario(
+        login,
+        senha,
+        ip_address=client_ip,
+        user_agent=user_agent
+    )
+
+    if success:
+        return {"message": "Autenticado com sucesso", "success": True}
+    else:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
 
 @router.get("/setores", summary="Listar setores válidos (subcontainers) dentro de Ativos")
@@ -31,7 +95,8 @@ def get_inconsistencias():
 @router.post("/inconsistencias/corrigir", summary="Corrigir automaticamente usuários com status divergente")
 def corrigir_inconsistencias_endpoint(
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     """
     Move automaticamente cada usuário inconsistente para a pasta certa
@@ -39,12 +104,11 @@ def corrigir_inconsistencias_endpoint(
     """
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     return ad_service.corrigir_inconsistencias(
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
@@ -62,7 +126,8 @@ def get_candidatos_teste():
 def deletar_lote(
     request: Request,
     logins: List[str] = Body(..., embed=True, description="Lista de logins a remover, revisada manualmente"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     """
     Remove os usuários cujos logins forem informados explicitamente.
@@ -71,13 +136,12 @@ def deletar_lote(
     """
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     return ad_service.deletar_usuarios_em_lote(
         logins,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
@@ -98,17 +162,17 @@ def buscar_usuario(request: Request, login: str):
 def criar_usuario(
     request: Request,
     dados: UsuarioCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = dados.primeiro_nome  # ou use um usuário autenticado via JWT
 
     return ad_service.criar_usuario(
         dados,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
@@ -117,18 +181,18 @@ def atualizar_usuario(
     request: Request,
     login: str,
     dados: UsuarioUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     return ad_service.atualizar_usuario(
         login,
         dados,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
@@ -136,17 +200,17 @@ def atualizar_usuario(
 def remover_usuario(
     request: Request,
     login: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     ad_service.remover_usuario(
         login,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
     return None
 
@@ -156,18 +220,18 @@ def trocar_senha(
     request: Request,
     login: str,
     dados: TrocaSenha,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = login  # O próprio usuário está trocando a senha
 
     senha = ad_service.trocar_senha(
         login,
         dados.nova_senha,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
     return {"login": login, "nova_senha": senha}
 
@@ -176,18 +240,18 @@ def trocar_senha(
 def desabilitar_usuario(
     request: Request,
     login: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     return ad_service.desabilitar_usuario(
         login,
         desabilitar=True,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
@@ -195,18 +259,18 @@ def desabilitar_usuario(
 def habilitar_usuario(
     request: Request,
     login: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     return ad_service.desabilitar_usuario(
         login,
         desabilitar=False,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
@@ -215,7 +279,8 @@ def transferir_setor(
     request: Request,
     login: str,
     novo_subcontainer: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     """
     Move o usuário para outro subcontainer (setor), mantendo o mesmo status
@@ -223,43 +288,16 @@ def transferir_setor(
     """
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    operator = "system"  # Substituir por usuário autenticado via JWT
 
     return ad_service.transferir_usuario_setor(
         login,
         novo_subcontainer,
         ip_address=client_ip,
         user_agent=user_agent,
-        operator=operator
+        operator=usuario_atual
     )
 
 
-# NOVO: Endpoint de autenticação
-@router.post("/auth", summary="Autenticar usuário no AD")
-def autenticar_usuario(
-    request: Request,
-    login: str,
-    senha: str,
-    db: Session = Depends(get_db)
-):
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-
-    success = ad_service.autenticar_usuario(
-        login,
-        senha,
-        ip_address=client_ip,
-        user_agent=user_agent
-    )
-
-    if success:
-        return {"message": "Autenticado com sucesso", "success": True}
-    else:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-
-
-# NOVO: Endpoint de logout
 @router.post("/{login}/logout", summary="Registrar logout do usuário")
 def logout_usuario(
     request: Request,
