@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut, UsuarioCriadoOut, TrocaSenha
+from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut, UsuarioCriadoOut, TrocaSenha, CampoOrdenacao, Ordem, Setor
 from app.services import ad_service
 from app.database import get_db
 from app.core.auth import criar_token_acesso, get_current_user
@@ -145,17 +145,26 @@ def deletar_lote(
     )
 
 
-@router.get("", response_model=List[UsuarioOut], summary="Listar/buscar usuários")
+@router.get("", response_model=List[UsuarioOut], summary="Listar/buscar usuários com filtros")
 def listar_usuarios(
     request: Request,
-    nome: Optional[str] = Query(None, description="Filtra por parte do nome")
+    nome: Optional[str] = Query(None, description="Filtra por parte do nome"),
+    cargo: Optional[str] = Query(None, description="Filtra por parte do cargo (ex: Analista)"),
+    setor: Optional[Setor] = Query(None, description="Filtra por setor exato"),
+    email: Optional[str] = Query(None, description="Filtra por parte do email"),
+    ativo: Optional[bool] = Query(None, description="Filtra por status: true=ativos, false=inativos"),
+    ordenar_por: CampoOrdenacao = Query(CampoOrdenacao.NOME, description="Campo para ordenação"),
+    ordem: Ordem = Query(Ordem.ASC, description="Direção da ordenação")
 ):
-    return ad_service.listar_usuarios(filtro_nome=nome)
-
-
-@router.get("/{login}", response_model=UsuarioOut, summary="Consultar um usuário pelo login")
-def buscar_usuario(request: Request, login: str):
-    return ad_service.buscar_usuario(login)
+    return ad_service.listar_usuarios(
+        filtro_nome=nome,
+        filtro_cargo=cargo,
+        filtro_setor=setor.value if setor else None,
+        filtro_email=email,
+        filtro_ativo=ativo,
+        ordenar_por=ordenar_por.value,
+        ordem=ordem.value
+    )
 
 
 @router.post("", response_model=UsuarioCriadoOut, status_code=201, summary="Criar novo usuário")

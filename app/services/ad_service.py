@@ -14,12 +14,30 @@ UAC_NORMAL_ATIVO = 512
 UAC_NORMAL_DESABILITADA = 514
 
 
+def _extrair_setor_do_dn(dn: str) -> str | None:
+    """
+    Extrai o setor (subcontainer) do DN do usuário.
+    
+    Ex: "CN=Joao Silva,CN=CODEL,CN=Ativos,OU=PML,..." → "CODEL"
+    """
+    try:
+        partes = dn.split(',')
+        if len(partes) >= 3:
+            setor = partes[1].strip()  # Pega o segundo componente
+            if setor.upper().startswith('CN='):
+                return setor[3:]
+    except Exception:
+        pass
+    return None
+
+
 def _entry_to_usuario_out(entry) -> UsuarioOut:
     """
     Converte um registro do LDAP para o schema de saída da API.
     """
     uac = int(entry.userAccountControl.value) if entry.userAccountControl.value else UAC_NORMAL_ATIVO
     ativo = not (uac & 2)
+    dn = str(entry.entry_dn)
     return UsuarioOut(
         login=str(entry.sAMAccountName.value),
         nome_completo=str(entry.cn.value),
@@ -27,7 +45,8 @@ def _entry_to_usuario_out(entry) -> UsuarioOut:
         cargo=str(entry.title.value) if entry.title.value else None,
         tipo=str(entry.description.value) if entry.description.value else None,
         ativo=ativo,
-        distinguished_name=str(entry.entry_dn),
+        distinguished_name=dn,
+        setor=_extrair_setor_do_dn(dn),  # ← NOVO
     )
 
 
@@ -87,12 +106,33 @@ def listar_setores(base: Optional[str] = None) -> list[str]:
         conn.unbind()
 
 
-def listar_usuarios(filtro_nome: str | None = None):
+def listar_usuarios(
+    filtro_nome: str | None = None,
+    filtro_cargo: str | None = None,
+    filtro_setor: str | None = None,
+    filtro_email: str | None = None,
+    filtro_ativo: bool | None = None,
+    ordenar_por: str = "nome",
+    ordem: str = "asc"
+):
     """
-    Retorna lista de todos os usuários do Active Directory.
+    Retorna lista de usuários do Active Directory com filtros e ordenação.
+
+    Args:
+        filtro_nome (str | None): Filtra por parte do nome (CN).
+        filtro_cargo (str | None): Filtra por parte do cargo (title).
+        filtro_setor (str | None): Filtra por setor exato (CODEL, CMTU, etc.).
+        filtro_email (str | None): Filtra por parte do email.
+        filtro_ativo (bool | None): True = apenas ativos, False = apenas inativos, None = todos.
+        ordenar_por (str): Campo de ordenação (nome, login, email, cargo, status, setor).
+        ordem (str): "asc" ou "desc".
+
+    Returns:
+        list[UsuarioOut]: Lista de usuários filtrados e ordenados.
     """
     conn = get_connection()
     try:
+        # Filtro LDAP: apenas por nome (eficiente no servidor)
         ldap_filter = "(&(objectClass=user)(objectCategory=person)"
         if filtro_nome:
             ldap_filter += f"(cn=*{filtro_nome}*)"
@@ -104,7 +144,41 @@ def listar_usuarios(filtro_nome: str | None = None):
             search_scope=SUBTREE,
             attributes=["cn", "sAMAccountName", "mail", "title", "description", "userAccountControl"],
         )
-        return [_entry_to_usuario_out(e) for e in conn.entries]
+
+        # Converte para objetos
+        usuarios = [_entry_to_usuario_out(e) for e in conn.entries]
+
+        # 🔍 Aplica filtros em Python
+        if filtro_cargo:
+            termo = filtro_cargo.lower()
+            usuarios = [u for u in usuarios if u.cargo and termo in u.cargo.lower()]
+
+        if filtro_setor:
+            termo = filtro_setor.lower()
+            usuarios = [u for u in usuarios if u.setor and termo == u.setor.lower()]
+
+        if filtro_email:
+            termo = filtro_email.lower()
+            usuarios = [u for u in usuarios if u.email and termo in u.email.lower()]
+
+        if filtro_ativo is not None:
+            usuarios = [u for u in usuarios if u.ativo == filtro_ativo]
+
+        # 📊 Ordenação
+        chaves_ordenacao = {
+            "nome": lambda u: (u.nome_completo or "").lower(),
+            "login": lambda u: (u.login or "").lower(),
+            "email": lambda u: (u.email or "").lower(),
+            "cargo": lambda u: (u.cargo or "").lower(),
+            "status": lambda u: (u.ativo, (u.nome_completo or "").lower()),
+            "setor": lambda u: ((u.setor or "").lower(), (u.nome_completo or "").lower()),
+        }
+
+        chave = chaves_ordenacao.get(ordenar_por.lower(), chaves_ordenacao["nome"])
+        reverse = ordem.lower() == "desc"
+        usuarios.sort(key=chave, reverse=reverse)
+
+        return usuarios
     finally:
         conn.unbind()
 
@@ -764,3 +838,5 @@ def registrar_logout(login: str, ip_address: str = None, user_agent: str = None)
         db.close()
     except Exception as e:
         print(f"Erro ao registrar logout: {e}")
+
+        
