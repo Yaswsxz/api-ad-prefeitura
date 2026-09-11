@@ -58,8 +58,8 @@ class CampoOrdenacao(str, Enum):
 
 class Ordem(str, Enum):
     """Direção da ordenação."""
-    ASC = "crescente"
-    DESC = "decrescente"
+    ASC = "asc"
+    DESC = "desc"
 
 class Setor(str, Enum):
     """Setores disponíveis (subcontainers dentro de Ativos/Inativos)."""
@@ -86,8 +86,8 @@ class CampoOrdenacaoAuditoria(str, Enum):
 
 class OrdemAuditoria(str, Enum):
     """Direção da ordenação para auditoria."""
-    ASC = "crescente"
-    DESC = "decrescente"
+    ASC = "asc"
+    DESC = "desc"
 
 
 class LoginHistoryOut(BaseModel):
