@@ -441,7 +441,7 @@ def detectar_inconsistencias() -> list[dict]:
     """
     conn = get_connection()
     try:
-        base = "OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+        base = settings.AD_SEARCH_BASE  # cobre toda a OU=DESENVOL, nao so PML
         conn.search(
             search_base=base,
             search_filter="(&(objectClass=user)(objectCategory=person))",
@@ -553,7 +553,7 @@ def identificar_candidatos_teste() -> list[dict]:
     """
     conn = get_connection()
     try:
-        base = "OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
+        base = settings.AD_SEARCH_BASE  # cobre toda a OU=DESENVOL, nao so PML
         conn.search(
             search_base=base,
             search_filter="(&(objectClass=user)(objectCategory=person))",
@@ -696,52 +696,54 @@ def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = 
 
 def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agent: str = None) -> bool:
     """
-    Autentica um usuário no Active Directory e registra a tentativa de login.
+    Autentica um usuário no Active Directory, tentando abrir uma conexão
+    NTLM usando o login e a senha informados, e registra a tentativa
+    (sucesso ou falha) no banco de auditoria.
+
+    Monta o usuário no formato DOMINIO\\login, que é o exigido pela
+    autenticação NTLM (o DN completo do usuário não funciona aqui).
+    O domínio é extraído de AD_BIND_USER, que já vem nesse formato.
     """
+    dominio_netbios = settings.AD_BIND_USER.split("\\")[0] if "\\" in settings.AD_BIND_USER else None
+    user_ntlm = f"{dominio_netbios}\\{login}" if dominio_netbios else login
+
     try:
-        dn_usuario = _resolver_dn(login)
-        conn = get_connection()
+        test_conn = get_connection(user=user_ntlm, password=senha)
+        test_conn.unbind()
+
         try:
-            test_conn = get_connection(user=dn_usuario, password=senha)
-            test_conn.unbind()
-
-            try:
-                from app.audit_service import AuditService
-                from app.database import SessionLocal
-                db = SessionLocal()
-                audit = AuditService(db)
-                audit.log_login(
-                    username=login,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                    success=True
-                )
-                db.close()
-            except Exception as e:
-                print(f"Erro ao registrar login: {e}")
-
-            return True
-
+            from app.audit_service import AuditService
+            from app.database import SessionLocal
+            db = SessionLocal()
+            audit = AuditService(db)
+            audit.log_login(
+                username=login,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                success=True
+            )
+            db.close()
         except Exception as e:
-            try:
-                from app.audit_service import AuditService
-                from app.database import SessionLocal
-                db = SessionLocal()
-                audit = AuditService(db)
-                audit.log_login(
-                    username=login,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                    success=False,
-                    error_message=str(e)
-                )
-                db.close()
-            except Exception as e2:
-                print(f"Erro ao registrar falha de login: {e2}")
-            return False
-        finally:
-            conn.unbind()
-    except HTTPException:
+            print(f"Erro ao registrar login: {e}")
+
+        return True
+
+    except Exception as e:
+        try:
+            from app.audit_service import AuditService
+            from app.database import SessionLocal
+            db = SessionLocal()
+            audit = AuditService(db)
+            audit.log_login(
+                username=login,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                success=False,
+                error_message=str(e)
+            )
+            db.close()
+        except Exception as e2:
+            print(f"Erro ao registrar falha de login: {e2}")
         return False
 
 

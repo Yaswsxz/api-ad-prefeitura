@@ -21,7 +21,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Registra os endpoints (roteadores) da aplicação
+# Registra os endpoints (roteadores) da aplicação.
+# users.public_router: endpoints de login/autenticação, sem exigir token prévio.
+# users.router: todos os demais endpoints de usuários, protegidos por JWT.
+app.include_router(users.public_router)
 app.include_router(users.router)
 app.include_router(audit.router)
 

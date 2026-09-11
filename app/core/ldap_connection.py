@@ -4,9 +4,14 @@ from fastapi import HTTPException
 from app.core.config import settings
 
 
-def get_connection() -> Connection:
+def get_connection(user: str = None, password: str = None) -> Connection:
     """
     Abre uma conexão autenticada com o Active Directory usando NTLM.
+
+    Por padrão, usa a conta de serviço (AD_BIND_USER/AD_BIND_PASSWORD do .env).
+    Passando 'user' e 'password', é possível testar as credenciais de
+    qualquer usuário (usado por exemplo para validar login/senha no
+    endpoint de autenticação, sem precisar da conta de serviço para isso).
     """
     try:
         use_ssl = settings.AD_SERVER.lower().startswith("ldaps")
@@ -14,9 +19,9 @@ def get_connection() -> Connection:
 
         conn = Connection(
             server,
-            user=settings.AD_BIND_USER,
-            password=settings.AD_BIND_PASSWORD,
-            authentication=NTLM,      
+            user=user or settings.AD_BIND_USER,
+            password=password or settings.AD_BIND_PASSWORD,
+            authentication=NTLM,
             auto_bind=True,
         )
         return conn
