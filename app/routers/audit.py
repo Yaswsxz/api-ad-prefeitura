@@ -4,40 +4,50 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.audit_service import AuditService
+from app.schemas.user import LoginHistoryOut, EventoLogin, CampoOrdenacaoAuditoria, OrdemAuditoria
+from typing import Optional, List
 
 router = APIRouter(prefix="/auditoria", tags=["Auditoria"])
 
 
-@router.get("/login-history", summary="Histórico de logins/logouts")
+@router.get(
+    "/login-history",
+    response_model=List[LoginHistoryOut],
+    summary="Histórico de logins/logouts com filtros"
+)
 def get_login_history(
     request: Request,
-    username: Optional[str] = Query(None, description="Filtrar por usuário"),
-    days: int = Query(7, description="Últimos N dias", ge=1, le=365),
-    limit: int = Query(100, description="Limite de registros", ge=1, le=1000),
+    username: Optional[str] = Query(None, description="Filtrar por usuário (busca parcial)"),
+    event_type: Optional[EventoLogin] = Query(None, description="Filtrar por tipo de evento"),
+    sucesso: Optional[bool] = Query(None, description="Filtrar por sucesso (true/false)"),
+    data_inicio: Optional[datetime] = Query(None, description="Data/hora de início (ISO 8601)"),
+    data_fim: Optional[datetime] = Query(None, description="Data/hora de fim (ISO 8601)"),
+    ordenar_por: CampoOrdenacaoAuditoria = Query(
+        CampoOrdenacaoAuditoria.TIMESTAMP,
+        description="Campo para ordenação"
+    ),
+    ordem: OrdemAuditoria = Query(
+        OrdemAuditoria.DESC,
+        description="Direção da ordenação"
+    ),
+    limite: int = Query(100, ge=1, le=1000, description="Máximo de registros"),
     db: Session = Depends(get_db)
 ):
+    """
+    Retorna o histórico de logins/logouts com filtros e ordenação.
+    """
     try:
         audit_service = AuditService(db)
-        start_date = datetime.utcnow() - timedelta(days=days)
-        history = audit_service.get_login_history(username, start_date, limit)
-        
-        result = []
-        for item in history:
-            result.append({
-                "id": item.id,
-                "username": item.username,
-                "event_type": item.event_type,
-                "timestamp": item.timestamp.isoformat(),
-                "ip_address": item.ip_address,
-                "success": item.success,
-                "error_message": item.error_message
-            })
-        
-        return {
-            "total": len(result),
-            "period_days": days,
-            "history": result
-        }
+        return audit_service.listar_logins(
+            username=username,
+            event_type=event_type.value if event_type else None,
+            sucesso=sucesso,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            ordenar_por=ordenar_por.value,
+            ordem=ordem.value,
+            limite=limite
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

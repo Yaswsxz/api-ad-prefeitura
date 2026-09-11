@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 import json
 from app.database import LoginHistory, ActivityHistory
 import logging
+from sqlalchemy import desc, asc
 
 logger = logging.getLogger(__name__)
 
@@ -135,3 +136,51 @@ class AuditService:
             "total_activities": len(activities),
             "action_counts": action_counts
         }
+
+    def listar_logins(
+        self,
+        username: Optional[str] = None,
+        event_type: Optional[str] = None,
+        sucesso: Optional[bool] = None,
+        data_inicio: Optional[datetime] = None,
+        data_fim: Optional[datetime] = None,
+        ordenar_por: str = "timestamp",
+        ordem: str = "desc",
+        limite: int = 100
+    ) -> List[LoginHistory]:
+        """
+        Lista o histórico de logins/logouts com filtros e ordenação.
+
+        Args:
+            username: Filtra por parte do login do usuário.
+            event_type: 'login' ou 'logout'.
+            sucesso: True (sucesso) ou False (falha).
+            data_inicio: Data/hora de início.
+            data_fim: Data/hora de fim.
+            ordenar_por: Campo de ordenação ('timestamp', 'username', 'event_type').
+            ordem: 'asc' ou 'desc'.
+            limite: Máximo de registros.
+
+        Returns:
+            Lista de objetos LoginHistory.
+        """
+        query = self.db.query(LoginHistory)
+
+        # Filtros
+        if username:
+            query = query.filter(LoginHistory.username.ilike(f"%{username}%"))
+        if event_type:
+            query = query.filter(LoginHistory.event_type == event_type)
+        if sucesso is not None:
+            query = query.filter(LoginHistory.success == sucesso)
+        if data_inicio:
+            query = query.filter(LoginHistory.timestamp >= data_inicio)
+        if data_fim:
+            query = query.filter(LoginHistory.timestamp <= data_fim)
+
+        # Ordenação
+        coluna = getattr(LoginHistory, ordenar_por, LoginHistory.timestamp)
+        query = query.order_by(desc(coluna) if ordem.lower() == "desc" else asc(coluna))
+
+        # Limite
+        return query.limit(limite).all()
