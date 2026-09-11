@@ -14,21 +14,52 @@ UAC_NORMAL_ATIVO = 512
 UAC_NORMAL_DESABILITADA = 514
 
 
-def _extrair_setor_do_dn(dn: str) -> str | None:
+def _registrar_atividade(operator: str, action: str, target_user: str, details: dict,
+                          ip_address: str = None, user_agent: str = None, status: str = "SUCCESS") -> None:
     """
-    Extrai o setor (subcontainer) do DN do usuário.
-    
-    Ex: "CN=Joao Silva,CN=CODEL,CN=Ativos,OU=PML,..." → "CODEL"
+    Registra uma ação no banco de auditoria. Centraliza o padrão repetido em
+    quase toda função de escrita do serviço (abrir sessão, registrar, fechar,
+    nunca deixar uma falha de auditoria quebrar a operação principal).
     """
     try:
-        partes = dn.split(',')
-        if len(partes) >= 3:
-            setor = partes[1].strip()  # Pega o segundo componente
-            if setor.upper().startswith('CN='):
-                return setor[3:]
-    except Exception:
-        pass
-    return None
+        from app.audit_service import AuditService
+        from app.database import SessionLocal
+        db = SessionLocal()
+        audit = AuditService(db)
+        audit.log_activity(
+            username=operator,
+            action=action,
+            target_user=target_user,
+            details=details,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status=status,
+        )
+        db.close()
+    except Exception as e:
+        print(f"Erro ao registrar auditoria: {e}")
+
+
+def _registrar_login(username: str, ip_address: str = None, user_agent: str = None,
+                      success: bool = True, error_message: str = None) -> None:
+    """
+    Registra uma tentativa de login (sucesso ou falha) no banco de auditoria.
+    """
+    try:
+        from app.audit_service import AuditService
+        from app.database import SessionLocal
+        db = SessionLocal()
+        audit = AuditService(db)
+        audit.log_login(
+            username=username,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            success=success,
+            error_message=error_message,
+        )
+        db.close()
+    except Exception as e:
+        print(f"Erro ao registrar login: {e}")
 
 
 def _entry_to_usuario_out(entry) -> UsuarioOut:
@@ -37,7 +68,6 @@ def _entry_to_usuario_out(entry) -> UsuarioOut:
     """
     uac = int(entry.userAccountControl.value) if entry.userAccountControl.value else UAC_NORMAL_ATIVO
     ativo = not (uac & 2)
-    dn = str(entry.entry_dn)
     return UsuarioOut(
         login=str(entry.sAMAccountName.value),
         nome_completo=str(entry.cn.value),
@@ -45,8 +75,7 @@ def _entry_to_usuario_out(entry) -> UsuarioOut:
         cargo=str(entry.title.value) if entry.title.value else None,
         tipo=str(entry.description.value) if entry.description.value else None,
         ativo=ativo,
-        distinguished_name=dn,
-        setor=_extrair_setor_do_dn(dn),  # ← NOVO
+        distinguished_name=str(entry.entry_dn),
     )
 
 
@@ -106,33 +135,12 @@ def listar_setores(base: Optional[str] = None) -> list[str]:
         conn.unbind()
 
 
-def listar_usuarios(
-    filtro_nome: str | None = None,
-    filtro_cargo: str | None = None,
-    filtro_setor: str | None = None,
-    filtro_email: str | None = None,
-    filtro_ativo: bool | None = None,
-    ordenar_por: str = "nome",
-    ordem: str = "asc"
-):
+def listar_usuarios(filtro_nome: str | None = None):
     """
-    Retorna lista de usuários do Active Directory com filtros e ordenação.
-
-    Args:
-        filtro_nome (str | None): Filtra por parte do nome (CN).
-        filtro_cargo (str | None): Filtra por parte do cargo (title).
-        filtro_setor (str | None): Filtra por setor exato (CODEL, CMTU, etc.).
-        filtro_email (str | None): Filtra por parte do email.
-        filtro_ativo (bool | None): True = apenas ativos, False = apenas inativos, None = todos.
-        ordenar_por (str): Campo de ordenação (nome, login, email, cargo, status, setor).
-        ordem (str): "asc" ou "desc".
-
-    Returns:
-        list[UsuarioOut]: Lista de usuários filtrados e ordenados.
+    Retorna lista de todos os usuários do Active Directory.
     """
     conn = get_connection()
     try:
-        # Filtro LDAP: apenas por nome (eficiente no servidor)
         ldap_filter = "(&(objectClass=user)(objectCategory=person)"
         if filtro_nome:
             ldap_filter += f"(cn=*{filtro_nome}*)"
@@ -144,41 +152,7 @@ def listar_usuarios(
             search_scope=SUBTREE,
             attributes=["cn", "sAMAccountName", "mail", "title", "description", "userAccountControl"],
         )
-
-        # Converte para objetos
-        usuarios = [_entry_to_usuario_out(e) for e in conn.entries]
-
-        # 🔍 Aplica filtros em Python
-        if filtro_cargo:
-            termo = filtro_cargo.lower()
-            usuarios = [u for u in usuarios if u.cargo and termo in u.cargo.lower()]
-
-        if filtro_setor:
-            termo = filtro_setor.lower()
-            usuarios = [u for u in usuarios if u.setor and termo == u.setor.lower()]
-
-        if filtro_email:
-            termo = filtro_email.lower()
-            usuarios = [u for u in usuarios if u.email and termo in u.email.lower()]
-
-        if filtro_ativo is not None:
-            usuarios = [u for u in usuarios if u.ativo == filtro_ativo]
-
-        # 📊 Ordenação
-        chaves_ordenacao = {
-            "nome": lambda u: (u.nome_completo or "").lower(),
-            "login": lambda u: (u.login or "").lower(),
-            "email": lambda u: (u.email or "").lower(),
-            "cargo": lambda u: (u.cargo or "").lower(),
-            "status": lambda u: (u.ativo, (u.nome_completo or "").lower()),
-            "setor": lambda u: ((u.setor or "").lower(), (u.nome_completo or "").lower()),
-        }
-
-        chave = chaves_ordenacao.get(ordenar_por.lower(), chaves_ordenacao["nome"])
-        reverse = ordem.lower() == "desc"
-        usuarios.sort(key=chave, reverse=reverse)
-
-        return usuarios
+        return [_entry_to_usuario_out(e) for e in conn.entries]
     finally:
         conn.unbind()
 
@@ -263,28 +237,19 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
         usuario = buscar_usuario(login)
 
         # 5. Registra a ação no banco de auditoria
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_activity(
-                username=operator,
-                action="CREATE_USER",
-                target_user=login,
-                details={
-                    "nome_completo": nome_completo,
-                    "email": email,
-                    "cargo": dados.cargo,
-                    "cpf": dados.cpf,
-                },
-                ip_address=ip_address,
-                user_agent=user_agent,
-                status="SUCCESS"
-            )
-            db.close()
-        except Exception as e:
-            print(f"Erro ao registrar auditoria: {e}")
+        _registrar_atividade(
+            operator=operator,
+            action="CREATE_USER",
+            target_user=login,
+            details={
+                "nome_completo": nome_completo,
+                "email": email,
+                "cargo": dados.cargo,
+                "cpf": dados.cpf,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return UsuarioCriadoOut(**usuario.model_dump(), senha_gerada=senha)
 
@@ -321,23 +286,14 @@ def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, 
 
         usuario = buscar_usuario(login)
 
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_activity(
-                username=operator,
-                action="UPDATE_USER",
-                target_user=login,
-                details={"campos_alterados": dados.model_dump(exclude_unset=True)},
-                ip_address=ip_address,
-                user_agent=user_agent,
-                status="SUCCESS"
-            )
-            db.close()
-        except Exception as e:
-            print(f"Erro ao registrar auditoria: {e}")
+        _registrar_atividade(
+            operator=operator,
+            action="UPDATE_USER",
+            target_user=login,
+            details={"campos_alterados": dados.model_dump(exclude_unset=True)},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return usuario
     finally:
@@ -355,23 +311,14 @@ def remover_usuario(login: str, ip_address: str = None, user_agent: str = None, 
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao remover usuário: {conn.result}")
 
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_activity(
-                username=operator,
-                action="DELETE_USER",
-                target_user=login,
-                details={"usuario_removido": login},
-                ip_address=ip_address,
-                user_agent=user_agent,
-                status="SUCCESS"
-            )
-            db.close()
-        except Exception as e:
-            print(f"Erro ao registrar auditoria: {e}")
+        _registrar_atividade(
+            operator=operator,
+            action="DELETE_USER",
+            target_user=login,
+            details={"usuario_removido": login},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
     finally:
         conn.unbind()
@@ -390,23 +337,14 @@ def trocar_senha(login: str, nova_senha: str | None, ip_address: str = None, use
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao trocar senha: {conn.result}")
 
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_activity(
-                username=operator,
-                action="CHANGE_PASSWORD",
-                target_user=login,
-                details={"senha_gerada": senha if nova_senha is None else "Senha fornecida pelo usuário"},
-                ip_address=ip_address,
-                user_agent=user_agent,
-                status="SUCCESS"
-            )
-            db.close()
-        except Exception as e:
-            print(f"Erro ao registrar auditoria: {e}")
+        _registrar_atividade(
+            operator=operator,
+            action="CHANGE_PASSWORD",
+            target_user=login,
+            details={"senha_gerada": senha if nova_senha is None else "Senha fornecida pelo usuário"},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return senha
     finally:
@@ -486,23 +424,14 @@ def transferir_usuario_setor(login: str, novo_subcontainer: str, ip_address: str
 
     usuario = buscar_usuario(login)
 
-    try:
-        from app.audit_service import AuditService
-        from app.database import SessionLocal
-        db = SessionLocal()
-        audit = AuditService(db)
-        audit.log_activity(
-            username=operator,
-            action="TRANSFER_SETOR",
-            target_user=login,
-            details={"novo_setor": novo_subcontainer, "dn_anterior": dn_atual},
-            ip_address=ip_address,
-            user_agent=user_agent,
-            status="SUCCESS"
-        )
-        db.close()
-    except Exception as e:
-        print(f"Erro ao registrar auditoria: {e}")
+    _registrar_atividade(
+        operator=operator,
+        action="TRANSFER_SETOR",
+        target_user=login,
+        details={"novo_setor": novo_subcontainer, "dn_anterior": dn_atual},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
     return usuario
 
@@ -597,23 +526,15 @@ def corrigir_inconsistencias(ip_address: str = None, user_agent: str = None, ope
             })
 
     # Registra a correção em lote na auditoria
-    try:
-        from app.audit_service import AuditService
-        from app.database import SessionLocal
-        db = SessionLocal()
-        audit = AuditService(db)
-        audit.log_activity(
-            username=operator,
-            action="FIX_INCONSISTENCIAS",
-            target_user="multiplos",
-            details={"corrigidos": corrigidos, "erros": erros, "detalhes": detalhes},
-            ip_address=ip_address,
-            user_agent=user_agent,
-            status="SUCCESS" if erros == 0 else "PARTIAL"
-        )
-        db.close()
-    except Exception as e:
-        print(f"Erro ao registrar auditoria: {e}")
+    _registrar_atividade(
+        operator=operator,
+        action="FIX_INCONSISTENCIAS",
+        target_user="multiplos",
+        details={"corrigidos": corrigidos, "erros": erros, "detalhes": detalhes},
+        ip_address=ip_address,
+        user_agent=user_agent,
+        status="SUCCESS" if erros == 0 else "PARTIAL",
+    )
 
     return {"corrigidos": corrigidos, "erros": erros, "detalhes": detalhes}
 
@@ -685,23 +606,15 @@ def deletar_usuarios_em_lote(logins: list[str], ip_address: str = None, user_age
             resultados.append({"login": login, "status": f"ERRO: {e}"})
             erros += 1
 
-    try:
-        from app.audit_service import AuditService
-        from app.database import SessionLocal
-        db = SessionLocal()
-        audit = AuditService(db)
-        audit.log_activity(
-            username=operator,
-            action="DELETE_BATCH",
-            target_user="multiplos",
-            details={"logins": logins, "removidos": sucesso, "erros": erros, "detalhes": resultados},
-            ip_address=ip_address,
-            user_agent=user_agent,
-            status="SUCCESS" if erros == 0 else "PARTIAL"
-        )
-        db.close()
-    except Exception as e:
-        print(f"Erro ao registrar auditoria: {e}")
+    _registrar_atividade(
+        operator=operator,
+        action="DELETE_BATCH",
+        target_user="multiplos",
+        details={"logins": logins, "removidos": sucesso, "erros": erros, "detalhes": resultados},
+        ip_address=ip_address,
+        user_agent=user_agent,
+        status="SUCCESS" if erros == 0 else "PARTIAL",
+    )
 
     return {"removidos": sucesso, "erros": erros, "detalhes": resultados}
 
@@ -742,26 +655,17 @@ def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = 
         usuario = buscar_usuario(login)
 
         # 4. Registra a ação no banco de auditoria
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_activity(
-                username=operator,
-                action=acao,
-                target_user=login,
-                details={
-                    "status": "desabilitado" if desabilitar else "habilitado",
-                    "ou_destino": ou_destino
-                },
-                ip_address=ip_address,
-                user_agent=user_agent,
-                status="SUCCESS"
-            )
-            db.close()
-        except Exception as e:
-            print(f"Erro ao registrar auditoria: {e}")
+        _registrar_atividade(
+            operator=operator,
+            action=acao,
+            target_user=login,
+            details={
+                "status": "desabilitado" if desabilitar else "habilitado",
+                "ou_destino": ou_destino
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
         return usuario
     finally:
@@ -785,39 +689,12 @@ def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agen
         test_conn = get_connection(user=user_ntlm, password=senha)
         test_conn.unbind()
 
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_login(
-                username=login,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                success=True
-            )
-            db.close()
-        except Exception as e:
-            print(f"Erro ao registrar login: {e}")
+        _registrar_login(username=login, ip_address=ip_address, user_agent=user_agent, success=True)
 
         return True
 
     except Exception as e:
-        try:
-            from app.audit_service import AuditService
-            from app.database import SessionLocal
-            db = SessionLocal()
-            audit = AuditService(db)
-            audit.log_login(
-                username=login,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                success=False,
-                error_message=str(e)
-            )
-            db.close()
-        except Exception as e2:
-            print(f"Erro ao registrar falha de login: {e2}")
+        _registrar_login(username=login, ip_address=ip_address, user_agent=user_agent, success=False, error_message=str(e))
         return False
 
 
@@ -838,5 +715,3 @@ def registrar_logout(login: str, ip_address: str = None, user_agent: str = None)
         db.close()
     except Exception as e:
         print(f"Erro ao registrar logout: {e}")
-
-        
