@@ -183,6 +183,12 @@ AD_USER_OU=OU=DESENVOL,DC=seu-dominio,DC=local
 AD_BIND_USER=dominio\usuario_servico
 AD_BIND_PASSWORD=sua_senha
 
+# Usuário de teste (opcional — usado apenas pelos testes automatizados
+# de "caminho de sucesso" em tests/test_success_path.py). Se não for
+# configurado, esses testes são pulados automaticamente.
+TEST_AD_USER=dominio\usuario_teste
+TEST_AD_PASSWORD=sua_senha_de_teste
+
 # Banco de Dados
 DATABASE_URL=sqlite:///./ad_audit.db
 ```
@@ -214,7 +220,7 @@ py -3.11 -m pytest tests/ -v
 | POST | `/usuarios/inconsistencias/corrigir` | Corrige automaticamente as inconsistências detectadas |
 | GET | `/usuarios/candidatos-teste` | Sinaliza possíveis contas de teste (não remove nada) |
 | POST | `/usuarios/deletar-lote` | Remove apenas os logins explicitamente informados |
-| GET | `/usuarios` | Lista/busca usuários |
+| GET | `/usuarios` | Lista/busca usuários. Filtros disponíveis (query params, todos opcionais): `nome`, `cargo`, `setor`, `email`, `ativo` (true/false), `ordenar_por` (`nome`/`login`/`cargo`/`email`), `ordem` (`asc`/`desc`) |
 | GET | `/usuarios/{login}` | Consulta um usuário pelo login |
 | POST | `/usuarios` | Cria um novo usuário |
 | PUT | `/usuarios/{login}` | Atualiza dados do usuário (cargo, tipo, email, telefone) |
@@ -230,8 +236,8 @@ py -3.11 -m pytest tests/ -v
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| GET | `/auditoria/login-history` | Histórico de logins e logouts |
-| GET | `/auditoria/activity-history` | Histórico de ações |
+| GET | `/auditoria/login-history` | Histórico de logins e logouts. Retorna `{"total": N, "items": [...]}` |
+| GET | `/auditoria/activity-history` | Histórico de ações. Retorna `{"total": N, "period_days": N, "items": [...]}` |
 | GET | `/auditoria/user-summary/{login}` | Resumo de atividades por usuário |
 | GET | `/auditoria/security-report` | Relatório de segurança |
 
@@ -276,7 +282,7 @@ py -3.11 -m pytest tests/ -v
 }
 ```
 
-> Novos usuários são criados com a conta **desabilitada** por padrão (`ativo: false`).
+> Novos usuários são criados com a conta **desabilitada** por padrão (`ativo: false`). A senha só é aplicada de verdade se a conexão com o AD suportar TLS/StartTLS — ver [Problemas Conhecidos](#problemas-conhecidos).
 
 ## Gestão de Setores e Consistência
 
@@ -350,17 +356,19 @@ Confirme que a porta está livre e suba o servidor novamente em um único termin
 
 ### O erro retornado é genérico (`"Internal Server Error"`, sem detalhes)
 
-Indica uma exceção não tratada pelo código. Consulte o **traceback completo no terminal onde o `uvicorn` está rodando**.
+Indica uma exceção não tratada pelo código. Consulte o **traceback completo no terminal onde o `uvicorn` está rodando**, e o arquivo `api_ad.log` (não versionado — ver `.gitignore`).
 
 ## Problemas Conhecidos
 
-### `habilitar` e `trocar-senha` retornam `unwillingToPerform` (código 53)
+### Troca de senha (`trocar-senha`) e reabilitação de conta (`habilitar`) falham silenciosamente sem TLS
 
-Ao reabilitar uma conta ou trocar a senha de um usuário já existente, o AD recusa a operação com `{'result': 53, 'description': 'unwillingToPerform', ...}`, mesmo com dados válidos. **Desabilitar** e **criar usuário** (que também define senha) funcionam normalmente com a mesma conexão e o mesmo usuário de serviço.
+**Sintoma:** `POST /usuarios/{login}/trocar-senha` não levanta erro, mas a senha nova não é aplicada de verdade. Tentar `POST /usuarios/{login}/habilitar` depois disso falha com `{'result': 53, 'description': 'unwillingToPerform', ...}`, porque o AD não permite habilitar uma conta sem senha válida.
 
-**Hipótese mais provável:** a conta de serviço configurada em `AD_BIND_USER` pode ter permissão delegada no AD para desabilitar/mover contas, mas não para reabilitá-las ou redefinir senha de contas existentes — uma restrição de segurança comum, definida do lado do administrador do domínio, não do código da API.
+**Causa real (confirmada em set/2026):** o Active Directory recusa a extensão de troca de senha (`extend.microsoft.modify_password`) em conexões LDAP **sem criptografia**. A conexão da API (`app/core/ldap_connection.py`) já tenta um upgrade automático via StartTLS antes do bind, mas isso só funciona se o **controlador de domínio tiver um certificado TLS configurado**.
 
-**Próximo passo:** confirmar com o administrador do AD se a conta de serviço tem as permissões delegadas de **"Reset Password"** e **"Enable/Disable Account"** completas na OU `PML`.
+No ambiente de testes atual, o controlador de domínio (Windows Server 2003) **recusa ativamente a negociação StartTLS** — não é uma questão de permissão da conta de serviço, como se suspeitava anteriormente.
+
+**Próximo passo:** confirmar com o administrador do domínio se é possível configurar um certificado TLS no controlador de domínio (para habilitar LDAPS na porta 636, ou StartTLS na porta 389). Sem isso, a troca de senha real pela API não funciona nesse ambiente — e o mesmo problema pode estar afetando o AD de produção, o que ainda precisa ser confirmado.
 
 ## Auditoria e LGPD
 
@@ -384,14 +392,15 @@ ApiTeste/
 │   ├── core/                     # Configurações e utilidades
 │   │   ├── config.py             # Variáveis de ambiente
 │   │   ├── generators.py         # Geradores de login/senha
-│   │   ├── ldap_connection.py    # Conexão com AD
+│   │   ├── ldap_connection.py    # Conexão com AD (com StartTLS)
 │   │   ├── auth.py               # Autenticação JWT
 │   │   └── logging_config.py     # Logs detalhados
 │   ├── routers/                  # Endpoints
 │   │   ├── users.py              # Rotas de usuários
 │   │   └── audit.py              # Rotas de auditoria
 │   ├── schemas/                  # Validação de dados
-│   │   └── user.py               # Schemas Pydantic
+│   │   ├── user.py               # Schemas Pydantic
+│   │   └── audit.py              # Schemas de resposta da auditoria
 │   ├── services/                 # Lógica de negócio
 │   │   └── ad_service.py         # Integração com AD
 │   ├── audit_service.py          # Serviço de auditoria
@@ -400,11 +409,14 @@ ApiTeste/
 ├── scripts/                      # Scripts auxiliares de investigação/diagnóstico do AD
 │   ├── listar_ous.py
 │   ├── criar_usuario_manual.py
+│   ├── investigar_ad.py
+│   ├── migrar_bloqueados.py
 │   ├── verificar_env.py
 │   └── migrar_users_para_ativos.py
 ├── tests/                        # Testes automatizados (pytest)
 │   ├── test_api.py
-│   └── test_ad.py
+│   ├── test_ad.py
+│   └── test_success_path.py      # Testes de caminho de sucesso (requer TEST_AD_USER/TEST_AD_PASSWORD)
 ├── .env                          # Configurações (não versionar)
 ├── .env.example                  # Template de configurações
 ├── .gitignore                    # Arquivos ignorados
