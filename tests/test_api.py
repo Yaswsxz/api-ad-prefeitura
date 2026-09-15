@@ -37,13 +37,16 @@ def test_criar_usuario_sem_dados():
 def test_auditoria():
     """
     Testa se a auditoria esta funcionando.
-    /auditoria/login-history usa response_model=List[LoginHistoryOut],
-    então devolve a lista de registros diretamente (não embrulhada em
-    um campo "history" como acontece em /auditoria/activity-history).
+    /auditoria/login-history agora usa o mesmo envelope padrão dos
+    demais endpoints de listagem: {"total": N, "items": [...]}.
     """
     response = client.get("/auditoria/login-history")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    data = response.json()
+    assert isinstance(data, dict)
+    assert "total" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
 
 
 def test_login_invalido():

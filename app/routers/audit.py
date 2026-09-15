@@ -4,15 +4,16 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.audit_service import AuditService
-from app.schemas.user import LoginHistoryOut, EventoLogin, CampoOrdenacaoAuditoria, OrdemAuditoria
-from typing import Optional, List
+from app.core.logging_config import logger
+from app.schemas.user import EventoLogin, CampoOrdenacaoAuditoria, OrdemAuditoria
+from app.schemas.audit import LoginHistoryListOut, ActivityHistoryListOut
 
 router = APIRouter(prefix="/auditoria", tags=["Auditoria"])
 
 
 @router.get(
     "/login-history",
-    response_model=List[LoginHistoryOut],
+    response_model=LoginHistoryListOut,
     summary="Histórico de logins/logouts com filtros"
 )
 def get_login_history(
@@ -38,7 +39,7 @@ def get_login_history(
     """
     try:
         audit_service = AuditService(db)
-        return audit_service.listar_logins(
+        items = audit_service.listar_logins(
             username=username,
             event_type=event_type.value if event_type else None,
             sucesso=sucesso,
@@ -48,11 +49,17 @@ def get_login_history(
             ordem=ordem.value,
             limite=limite
         )
+        return {"total": len(items), "items": items}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Erro ao consultar login-history: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao consultar histórico de logins") from e
 
 
-@router.get("/activity-history", summary="Histórico de atividades")
+@router.get(
+    "/activity-history",
+    response_model=ActivityHistoryListOut,
+    summary="Histórico de atividades"
+)
 def get_activity_history(
     request: Request,
     username: Optional[str] = Query(None, description="Filtrar por usuário"),
@@ -65,27 +72,25 @@ def get_activity_history(
         audit_service = AuditService(db)
         start_date = datetime.utcnow() - timedelta(days=days)
         history = audit_service.get_activity_history(username, action, start_date, limit)
-        
-        result = []
-        for item in history:
-            result.append({
+
+        items = [
+            {
                 "id": item.id,
                 "username": item.username,
                 "action": item.action,
                 "target_user": item.target_user,
                 "details": item.details,
-                "timestamp": item.timestamp.isoformat(),
+                "timestamp": item.timestamp,
                 "ip_address": item.ip_address,
-                "status": item.status
-            })
-        
-        return {
-            "total": len(result),
-            "period_days": days,
-            "history": result
-        }
+                "status": item.status,
+            }
+            for item in history
+        ]
+
+        return {"total": len(items), "period_days": days, "items": items}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Erro ao consultar activity-history: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao consultar histórico de atividades") from e
 
 
 @router.get("/user-summary/{username}", summary="Resumo de atividades de um usuário")
@@ -95,11 +100,16 @@ def get_user_activity_summary(
     days: int = Query(30, description="Últimos N dias", ge=1, le=365),
     db: Session = Depends(get_db)
 ):
+    """
+    Resumo agregado (não é uma lista paginável, então não usa o envelope
+    total/items — o formato de objeto de resumo já é o mais adequado aqui).
+    """
     try:
         audit_service = AuditService(db)
         return audit_service.get_user_activity_summary(username, days)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Erro ao consultar user-summary (username={username}): {e}")
+        raise HTTPException(status_code=500, detail="Erro ao consultar resumo do usuário") from e
 
 
 @router.get("/security-report", summary="Relatório de segurança")
@@ -108,26 +118,30 @@ def get_security_report(
     days: int = Query(7, description="Últimos N dias", ge=1, le=365),
     db: Session = Depends(get_db)
 ):
+    """
+    Relatório agregado (mesmo caso do user-summary: não é uma lista
+    paginável, então mantém o formato de objeto de relatório).
+    """
     try:
         audit_service = AuditService(db)
         start_date = datetime.utcnow() - timedelta(days=days)
-        
+
         failed_logins = audit_service.get_login_history(start_date=start_date, limit=1000)
         failed_logins = [l for l in failed_logins if not l.success]
-        
+
         ip_attempts = {}
         for login in failed_logins:
             ip = login.ip_address or "unknown"
             if ip not in ip_attempts:
                 ip_attempts[ip] = []
             ip_attempts[ip].append(login)
-        
+
         suspicious_ips = {
-            ip: attempts 
-            for ip, attempts in ip_attempts.items() 
+            ip: attempts
+            for ip, attempts in ip_attempts.items()
             if len(attempts) >= 5
         }
-        
+
         return {
             "period_days": days,
             "total_failed_logins": len(failed_logins),
@@ -141,4 +155,5 @@ def get_security_report(
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Erro ao gerar security-report: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao gerar relatório de segurança") from e

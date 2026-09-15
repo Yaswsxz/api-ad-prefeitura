@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     AD_USER_OU: str = "OU=Funcionarios,DC=prefeitura,DC=local"
     AD_BIND_USER: str = "svc_api@prefeitura.local"
     AD_BIND_PASSWORD: str = ""
+    TEST_AD_USER: str = ""
+    TEST_AD_PASSWORD: str = ""
 
     # --- Banco de Dados ---
     DATABASE_URL: str = "sqlite:///./ad_audit.db"

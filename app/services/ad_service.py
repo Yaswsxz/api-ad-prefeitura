@@ -6,12 +6,30 @@ from typing import Optional
 from app.core.config import settings
 from app.core.ldap_connection import get_connection
 from app.core.generators import gerar_login, gerar_senha
+from app.core.logging_config import logger
 from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut, UsuarioCriadoOut
 
 # Flags do atributo userAccountControl no Active Directory
 # 512 = conta habilitada | 514 = conta desabilitada (bit 2 = 2)
 UAC_NORMAL_ATIVO = 512
 UAC_NORMAL_DESABILITADA = 514
+
+
+# ---------------------------------------------------------------------------
+# Padrão único de tratamento de erro usado em toda função que fala com o AD:
+#
+#   except HTTPException:
+#       raise  # erros intencionais (404, 409, 422...) passam direto
+#   except LDAPException as e:
+#       logger.error(...)
+#       raise HTTPException(status_code=503, detail="Erro de comunicação com o AD") from e
+#   except Exception as e:
+#       logger.error(...)
+#       raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
+#
+# 503 = falha de comunicação com o AD (rede, servidor fora do ar, timeout).
+# 500 = bug inesperado de verdade, não relacionado à disponibilidade do AD.
+# ---------------------------------------------------------------------------
 
 
 def _registrar_atividade(operator: str, action: str, target_user: str, details: dict,
@@ -37,7 +55,7 @@ def _registrar_atividade(operator: str, action: str, target_user: str, details: 
         )
         db.close()
     except Exception as e:
-        print(f"Erro ao registrar auditoria: {e}")
+        logger.error(f"Erro ao registrar auditoria (action={action}, target_user={target_user}): {e}")
 
 
 def _registrar_login(username: str, ip_address: str = None, user_agent: str = None,
@@ -59,7 +77,7 @@ def _registrar_login(username: str, ip_address: str = None, user_agent: str = No
         )
         db.close()
     except Exception as e:
-        print(f"Erro ao registrar login: {e}")
+        logger.error(f"Erro ao registrar login (username={username}): {e}")
 
 
 def _entry_to_usuario_out(entry) -> UsuarioOut:
@@ -93,6 +111,14 @@ def _resolver_dn(login: str) -> str:
         if not conn.entries:
             raise HTTPException(status_code=404, detail="Usuário não encontrado no AD")
         return conn.entries[0].entry_dn
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em _resolver_dn (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em _resolver_dn (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -112,6 +138,12 @@ def _subcontainer_existe(subcontainer: str, base: str) -> bool:
             search_scope=LEVEL,  # só filhos diretos, não desce a árvore inteira
         )
         return len(conn.entries) > 0
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em _subcontainer_existe (subcontainer={subcontainer}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em _subcontainer_existe (subcontainer={subcontainer}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -131,19 +163,44 @@ def listar_setores(base: Optional[str] = None) -> list[str]:
             attributes=["cn"],
         )
         return sorted(str(entry.cn.value) for entry in conn.entries)
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em listar_setores: {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em listar_setores: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
 
-def listar_usuarios(filtro_nome: str | None = None):
+def listar_usuarios(
+    filtro_nome: str | None = None,
+    filtro_cargo: str | None = None,
+    filtro_setor: str | None = None,
+    filtro_email: str | None = None,
+    filtro_ativo: bool | None = None,
+    ordenar_por: str = "nome",
+    ordem: str = "asc",
+):
     """
-    Retorna lista de todos os usuários do Active Directory.
+    Retorna lista de usuários do Active Directory, com filtros opcionais
+    e ordenação.
+
+    filtro_nome, filtro_cargo e filtro_email são aplicados direto no
+    filtro LDAP (mais eficiente, filtra no servidor). filtro_setor e
+    filtro_ativo são aplicados depois, em Python, porque setor não é um
+    atributo direto do usuário no AD (é derivado do DN) e ativo já vem
+    calculado a partir de userAccountControl.
     """
     conn = get_connection()
     try:
         ldap_filter = "(&(objectClass=user)(objectCategory=person)"
         if filtro_nome:
             ldap_filter += f"(cn=*{filtro_nome}*)"
+        if filtro_cargo:
+            ldap_filter += f"(title=*{filtro_cargo}*)"
+        if filtro_email:
+            ldap_filter += f"(mail=*{filtro_email}*)"
         ldap_filter += ")"
 
         conn.search(
@@ -152,7 +209,30 @@ def listar_usuarios(filtro_nome: str | None = None):
             search_scope=SUBTREE,
             attributes=["cn", "sAMAccountName", "mail", "title", "description", "userAccountControl"],
         )
-        return [_entry_to_usuario_out(e) for e in conn.entries]
+        usuarios = [_entry_to_usuario_out(e) for e in conn.entries]
+
+        if filtro_setor:
+            usuarios = [u for u in usuarios if f"CN={filtro_setor}," in u.distinguished_name]
+
+        if filtro_ativo is not None:
+            usuarios = [u for u in usuarios if u.ativo == filtro_ativo]
+
+        campo_map = {
+            "nome": "nome_completo",
+            "login": "login",
+            "cargo": "cargo",
+            "email": "email",
+        }
+        campo = campo_map.get(ordenar_por, "nome_completo")
+        usuarios.sort(key=lambda u: (getattr(u, campo, None) or "").lower(), reverse=(ordem == "desc"))
+
+        return usuarios
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em listar_usuarios (filtro_nome={filtro_nome}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em listar_usuarios (filtro_nome={filtro_nome}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -172,6 +252,14 @@ def buscar_usuario(login: str) -> UsuarioOut:
         if not conn.entries:
             raise HTTPException(status_code=404, detail="Usuário não encontrado no AD")
         return _entry_to_usuario_out(conn.entries[0])
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em buscar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em buscar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -253,8 +341,14 @@ def criar_usuario(dados: UsuarioCreate, ip_address: str = None, user_agent: str 
 
         return UsuarioCriadoOut(**usuario.model_dump(), senha_gerada=senha)
 
+    except HTTPException:
+        raise
     except LDAPException as e:
-        raise HTTPException(status_code=500, detail=f"Erro LDAP ao criar usuário: {e}")
+        logger.error(f"Erro LDAP em criar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em criar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -296,6 +390,14 @@ def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, 
         )
 
         return usuario
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em atualizar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em atualizar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -320,6 +422,14 @@ def remover_usuario(login: str, ip_address: str = None, user_agent: str = None, 
             user_agent=user_agent,
         )
 
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em remover_usuario (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em remover_usuario (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -347,6 +457,14 @@ def trocar_senha(login: str, nova_senha: str | None, ip_address: str = None, use
         )
 
         return senha
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em trocar_senha (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em trocar_senha (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -364,31 +482,34 @@ def mover_usuario(login: str, nova_ou: str) -> bool:
     Returns:
         bool: True se movido com sucesso, False caso contrário.
     """
-    try:
-        dn_atual = _resolver_dn(login)
-        usuario = buscar_usuario(login)
-        nome_completo = usuario.nome_completo
-        novo_rdn = f"CN={nome_completo}"  # modify_dn espera só o NOVO NOME aqui, não o caminho inteiro
+    dn_atual = _resolver_dn(login)
+    usuario = buscar_usuario(login)
+    nome_completo = usuario.nome_completo
+    novo_rdn = f"CN={nome_completo}"  # modify_dn espera só o NOVO NOME aqui, não o caminho inteiro
 
-        conn = get_connection()
-        try:
-            # new_superior é o parâmetro correto para mudar de "pasta" (pai) no AD.
-            # Passar o caminho completo como segundo argumento (sem new_superior)
-            # causa erro de namingViolation, pois o AD tenta interpretar tudo como um nome só.
-            conn.modify_dn(dn_atual, novo_rdn, new_superior=nova_ou)
-            if conn.result['result'] == 0:
-                return True
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Erro ao mover usuário: {conn.result}"
-                )
-        finally:
-            conn.unbind()
+    conn = get_connection()
+    try:
+        # new_superior é o parâmetro correto para mudar de "pasta" (pai) no AD.
+        # Passar o caminho completo como segundo argumento (sem new_superior)
+        # causa erro de namingViolation, pois o AD tenta interpretar tudo como um nome só.
+        conn.modify_dn(dn_atual, novo_rdn, new_superior=nova_ou)
+        if conn.result['result'] == 0:
+            return True
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erro ao mover usuário: {conn.result}"
+            )
     except HTTPException:
         raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em mover_usuario (login={login}, nova_ou={nova_ou}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao mover usuário: {e}")
+        logger.error(f"Erro inesperado em mover_usuario (login={login}, nova_ou={nova_ou}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
+    finally:
+        conn.unbind()
 
 
 def transferir_usuario_setor(login: str, novo_subcontainer: str, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
@@ -420,20 +541,29 @@ def transferir_usuario_setor(login: str, novo_subcontainer: str, ip_address: str
         )
 
     novo_dn_base = f"CN={novo_subcontainer},{base_destino}"
-    mover_usuario(login, novo_dn_base)
 
-    usuario = buscar_usuario(login)
+    try:
+        mover_usuario(login, novo_dn_base)
+        usuario = buscar_usuario(login)
 
-    _registrar_atividade(
-        operator=operator,
-        action="TRANSFER_SETOR",
-        target_user=login,
-        details={"novo_setor": novo_subcontainer, "dn_anterior": dn_atual},
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
+        _registrar_atividade(
+            operator=operator,
+            action="TRANSFER_SETOR",
+            target_user=login,
+            details={"novo_setor": novo_subcontainer, "dn_anterior": dn_atual},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
-    return usuario
+        return usuario
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em transferir_usuario_setor (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em transferir_usuario_setor (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
 
 
 def detectar_inconsistencias() -> list[dict]:
@@ -477,6 +607,12 @@ def detectar_inconsistencias() -> list[dict]:
                 })
 
         return inconsistencias
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em detectar_inconsistencias: {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em detectar_inconsistencias: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -517,7 +653,16 @@ def corrigir_inconsistencias(ip_address: str = None, user_agent: str = None, ope
                 "acao": f"Movido para {'Ativos' if conta_ativa else 'Inativos'}/{subcontainer_atual}",
                 "status": "SUCESSO"
             })
+        except HTTPException as e:
+            logger.error(f"Falha ao corrigir inconsistência para {login}: {e.detail}")
+            erros += 1
+            detalhes.append({
+                "login": login,
+                "acao": "Falha ao mover",
+                "status": f"ERRO: {e.detail}"
+            })
         except Exception as e:
+            logger.error(f"Erro inesperado ao corrigir inconsistência para {login}: {e}")
             erros += 1
             detalhes.append({
                 "login": login,
@@ -579,6 +724,12 @@ def identificar_candidatos_teste() -> list[dict]:
                 })
 
         return candidatos
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em identificar_candidatos_teste: {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em identificar_candidatos_teste: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -600,9 +751,11 @@ def deletar_usuarios_em_lote(logins: list[str], ip_address: str = None, user_age
             resultados.append({"login": login, "status": "REMOVIDO"})
             sucesso += 1
         except HTTPException as e:
+            logger.error(f"Falha ao remover {login} em lote: {e.detail}")
             resultados.append({"login": login, "status": f"ERRO: {e.detail}"})
             erros += 1
         except Exception as e:
+            logger.error(f"Erro inesperado ao remover {login} em lote: {e}")
             resultados.append({"login": login, "status": f"ERRO: {e}"})
             erros += 1
 
@@ -668,6 +821,14 @@ def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = 
         )
 
         return usuario
+    except HTTPException:
+        raise
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em desabilitar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em desabilitar_usuario (login={login}): {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()
 
@@ -681,6 +842,10 @@ def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agen
     Monta o usuário no formato DOMINIO\\login, que é o exigido pela
     autenticação NTLM (o DN completo do usuário não funciona aqui).
     O domínio é extraído de AD_BIND_USER, que já vem nesse formato.
+
+    Retorna False tanto para credenciais inválidas quanto para falha de
+    comunicação com o AD — quem chama essa função (a rota de login) decide
+    o status HTTP certo a partir do resultado e do contexto.
     """
     dominio_netbios = settings.AD_BIND_USER.split("\\")[0] if "\\" in settings.AD_BIND_USER else None
     user_ntlm = f"{dominio_netbios}\\{login}" if dominio_netbios else login
@@ -693,7 +858,12 @@ def autenticar_usuario(login: str, senha: str, ip_address: str = None, user_agen
 
         return True
 
+    except LDAPException as e:
+        logger.warning(f"Falha de autenticação (credenciais ou AD indisponível) para {login}: {e}")
+        _registrar_login(username=login, ip_address=ip_address, user_agent=user_agent, success=False, error_message=str(e))
+        return False
     except Exception as e:
+        logger.error(f"Erro inesperado em autenticar_usuario (login={login}): {e}")
         _registrar_login(username=login, ip_address=ip_address, user_agent=user_agent, success=False, error_message=str(e))
         return False
 
@@ -714,4 +884,4 @@ def registrar_logout(login: str, ip_address: str = None, user_agent: str = None)
         )
         db.close()
     except Exception as e:
-        print(f"Erro ao registrar logout: {e}")
+        logger.error(f"Erro ao registrar logout (login={login}): {e}")
