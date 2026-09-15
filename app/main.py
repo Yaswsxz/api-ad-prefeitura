@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from importlib.metadata import version as pkg_version, PackageNotFoundError
+import sys
 
 from app.routers import users, audit
 from app.database import engine, Base, SessionLocal
@@ -77,4 +79,31 @@ def health_check(response: Response):
     return {
         "status": "ok" if saudavel else "degraded",
         "checks": checks,
+    }
+
+
+def _versao_pacote(nome: str) -> str:
+    """Busca a versão instalada de uma biblioteca, sem quebrar se não achar."""
+    try:
+        return pkg_version(nome)
+    except PackageNotFoundError:
+        return "desconhecida"
+
+
+@app.get("/versao", tags=["Status"])
+def versao():
+    """
+    Mostra a versão da API e das principais bibliotecas usadas em tempo
+    de execução. Não exige autenticação. Útil para confirmar rapidamente
+    se uma atualização/deploy foi aplicada de fato.
+    """
+    return {
+        "versao_api": app.version,
+        "python": sys.version.split()[0],
+        "dependencias": {
+            "fastapi": _versao_pacote("fastapi"),
+            "ldap3": _versao_pacote("ldap3"),
+            "sqlalchemy": _versao_pacote("sqlalchemy"),
+            "pydantic": _versao_pacote("pydantic"),
+        },
     }
