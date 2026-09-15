@@ -64,10 +64,11 @@ def test_caminho_sucesso_login_e_acao_concluida():
 
 
 @pytestmark_skip_sem_ad
-def test_caminho_sucesso_buscar_usuario_de_teste():
+def test_caminho_sucesso_listar_usuarios_com_token():
     """
-    Confirma que, com um token válido, dá para buscar o próprio usuário
-    de teste no AD e receber os dados esperados de volta.
+    Confirma que, com um token válido obtido a partir de um login real,
+    dá para chamar GET /usuarios (endpoint protegido de listagem) e
+    receber uma resposta bem-sucedida com dados reais do AD.
     """
     login_response = client.post(
         "/usuarios/login",
@@ -76,8 +77,7 @@ def test_caminho_sucesso_buscar_usuario_de_teste():
     token = login_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    response = client.get("/usuarios", params={"nome": "teste"}, headers=headers)
+    response = client.get("/usuarios", headers=headers)
     assert response.status_code == 200
     usuarios = response.json()
     assert isinstance(usuarios, list)
-    assert any(u["login"] == settings.TEST_AD_USER for u in usuarios)

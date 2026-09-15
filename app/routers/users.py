@@ -167,6 +167,17 @@ def listar_usuarios(
     )
 
 
+@router.get("/{login}", response_model=UsuarioOut, summary="Consultar um usuário pelo login")
+def buscar_usuario(
+    request: Request,
+    login: str,
+):
+    """
+    Retorna os dados de um único usuário do AD a partir do login (sAMAccountName).
+    """
+    return ad_service.buscar_usuario(login)
+
+
 @router.post("", response_model=UsuarioCriadoOut, status_code=201, summary="Criar novo usuário")
 def criar_usuario(
     request: Request,

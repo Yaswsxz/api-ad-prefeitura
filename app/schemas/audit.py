@@ -26,3 +26,22 @@ class ActivityHistoryListOut(BaseModel):
     total: int
     period_days: int
     items: List[ActivityHistoryItemOut]
+
+
+class UserHistoryEventOut(BaseModel):
+    """
+    Um evento na linha do tempo de um usuário — pode ter vindo de um
+    login/logout ou de uma atividade (criação, edição, remoção etc.).
+    O formato é o mesmo nos dois casos, para simplificar o consumo.
+    """
+    tipo: str
+    timestamp: datetime
+    sucesso: bool
+    ip_address: Optional[str] = None
+    detalhes: Optional[str] = None
+
+
+class UserHistoryListOut(BaseModel):
+    total: int
+    login: str
+    items: List[UserHistoryEventOut]
