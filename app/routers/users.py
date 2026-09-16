@@ -83,6 +83,16 @@ def get_setores():
     return {"setores": ad_service.listar_setores()}
 
 
+@router.get("/cargos", summary="Listar cargos já cadastrados no AD")
+def get_cargos():
+    """
+    Retorna a lista de cargos distintos já usados por usuários existentes
+    no AD, sem duplicatas. Útil para popular um dropdown ao criar ou
+    atualizar um usuário, evitando variações de digitação.
+    """
+    return {"cargos": ad_service.listar_cargos()}
+
+
 @router.get("/inconsistencias", summary="Detectar usuários com status divergente da pasta onde estão")
 def get_inconsistencias():
     """
@@ -165,6 +175,17 @@ def listar_usuarios(
         ordenar_por=ordenar_por.value,
         ordem=ordem.value
     )
+
+
+@router.get("/{login}", response_model=UsuarioOut, summary="Consultar um usuário pelo login")
+def buscar_usuario(
+    request: Request,
+    login: str,
+):
+    """
+    Retorna os dados de um único usuário do AD a partir do login (sAMAccountName).
+    """
+    return ad_service.buscar_usuario(login)
 
 
 @router.post("", response_model=UsuarioCriadoOut, status_code=201, summary="Criar novo usuário")

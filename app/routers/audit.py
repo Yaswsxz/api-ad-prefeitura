@@ -6,7 +6,7 @@ from app.database import get_db
 from app.audit_service import AuditService
 from app.core.logging_config import logger
 from app.schemas.user import EventoLogin, CampoOrdenacaoAuditoria, OrdemAuditoria
-from app.schemas.audit import LoginHistoryListOut, ActivityHistoryListOut
+from app.schemas.audit import LoginHistoryListOut, ActivityHistoryListOut, UserHistoryListOut
 
 router = APIRouter(prefix="/auditoria", tags=["Auditoria"])
 
@@ -93,6 +93,33 @@ def get_activity_history(
         raise HTTPException(status_code=500, detail="Erro ao consultar histórico de atividades") from e
 
 
+@router.get(
+    "/historico/{login}",
+    response_model=UserHistoryListOut,
+    summary="Histórico detalhado (linha do tempo) de um usuário específico"
+)
+def get_user_history(
+    request: Request,
+    login: str,
+    limit: int = Query(100, description="Máximo de eventos retornados", ge=1, le=500),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna todos os eventos relacionados a um usuário específico —
+    logins, logouts e atividades (criação, edição, remoção, troca de
+    senha etc.) — combinados numa única linha do tempo, do mais recente
+    para o mais antigo. Útil para investigar "o que aconteceu com a
+    conta de fulano".
+    """
+    try:
+        audit_service = AuditService(db)
+        eventos = audit_service.get_user_history(login, limit)
+        return {"total": len(eventos), "login": login, "items": eventos}
+    except Exception as e:
+        logger.error(f"Erro ao consultar histórico do usuário {login}: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao consultar histórico do usuário") from e
+
+
 @router.get("/user-summary/{username}", summary="Resumo de atividades de um usuário")
 def get_user_activity_summary(
     request: Request,
@@ -102,7 +129,7 @@ def get_user_activity_summary(
 ):
     """
     Resumo agregado (não é uma lista paginável, então não usa o envelope
-    total/items — o formato de objeto de resumo já é o mais adequado aqui).
+    total/items — o formato de objeto de resumo já é o mais adequado aqui).z
     """
     try:
         audit_service = AuditService(db)

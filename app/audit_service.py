@@ -184,3 +184,39 @@ class AuditService:
 
         # Limite
         return query.limit(limite).all()
+
+    def get_user_history(self, username: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Monta uma linha do tempo única para um usuário específico,
+        combinando login/logout e atividades (criação, edição, remoção
+        etc.) em ordem cronológica decrescente.
+
+        Cada evento vira um dicionário com o mesmo formato, independente
+        de ter vindo de LoginHistory ou ActivityHistory, para o
+        consumidor da API não precisar diferenciar as duas origens.
+        """
+        logins = self.get_login_history(username=username, limit=limit)
+        atividades = self.get_activity_history(username=username, limit=limit)
+
+        eventos: List[Dict[str, Any]] = []
+
+        for l in logins:
+            eventos.append({
+                "tipo": l.event_type,  # "login" ou "logout"
+                "timestamp": l.timestamp,
+                "sucesso": bool(l.success),
+                "ip_address": l.ip_address,
+                "detalhes": l.error_message,
+            })
+
+        for a in atividades:
+            eventos.append({
+                "tipo": a.action,  # ex: "CREATE_USER", "DELETE_USER"...
+                "timestamp": a.timestamp,
+                "sucesso": (a.status == "SUCCESS"),
+                "ip_address": a.ip_address,
+                "detalhes": a.details,
+            })
+
+        eventos.sort(key=lambda e: e["timestamp"], reverse=True)
+        return eventos[:limit]

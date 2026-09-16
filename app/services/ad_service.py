@@ -173,6 +173,33 @@ def listar_setores(base: Optional[str] = None) -> list[str]:
         conn.unbind()
 
 
+def listar_cargos() -> list[str]:
+    """
+    Lista os cargos (atributo 'title') distintos já cadastrados entre os
+    usuários do AD, sem duplicatas e em ordem alfabética. Útil para
+    popular um dropdown no frontend, evitando variações de digitação
+    para o mesmo cargo.
+    """
+    conn = get_connection()
+    try:
+        conn.search(
+            search_base=settings.AD_BASE_DN,
+            search_filter="(&(objectClass=user)(objectCategory=person)(title=*))",
+            search_scope=SUBTREE,
+            attributes=["title"],
+        )
+        cargos = {str(entry.title.value) for entry in conn.entries if entry.title.value}
+        return sorted(cargos)
+    except LDAPException as e:
+        logger.error(f"Erro LDAP em listar_cargos: {e}")
+        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
+    except Exception as e:
+        logger.error(f"Erro inesperado em listar_cargos: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
+    finally:
+        conn.unbind()
+
+
 def listar_usuarios(
     filtro_nome: str | None = None,
     filtro_cargo: str | None = None,
