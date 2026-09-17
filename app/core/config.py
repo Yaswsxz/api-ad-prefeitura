@@ -13,10 +13,7 @@ class Settings(BaseSettings):
     AD_BIND_PASSWORD: str = ""
     TEST_AD_USER: str = ""
     TEST_AD_PASSWORD: str = ""
-    AD_PML_BASE: str = ""
-    AD_OPERATIVOS_BASE: str = ""
-    AD_INOPERANTES_BASE: str = ""
-    AD_DESINCORPORADOS_BASE: str = ""
+    AD_PML_BASE: str = "OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br"
 
     # --- Banco de Dados ---
     DATABASE_URL: str = "sqlite:///./ad_audit.db"
