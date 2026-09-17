@@ -42,8 +42,10 @@ def test_login_valido_gera_token():
 def test_caminho_sucesso_login_e_acao_concluida():
     """
     Caminho de sucesso completo: login válido -> token -> chamada a um
-    endpoint protegido (listar setores) usando esse token -> confirma
+    endpoint protegido (listar cargos) usando esse token -> confirma
     que a ação foi concluída com dados reais vindos do AD.
+    (Antes usava /usuarios/setores, que não existe mais desde a
+    reestruturação da árvore em Operativos/Inoperantes/Desincorporados.)
     """
     # 1. Login com o usuário de teste dedicado
     login_response = client.post(
@@ -55,12 +57,12 @@ def test_caminho_sucesso_login_e_acao_concluida():
 
     # 2. Usa o token para chamar um endpoint protegido
     headers = {"Authorization": f"Bearer {token}"}
-    setores_response = client.get("/usuarios/setores", headers=headers)
+    cargos_response = client.get("/usuarios/cargos", headers=headers)
 
     # 3. Confirma que a ação foi concluída de verdade (200, não 401/403)
-    assert setores_response.status_code == 200
-    assert "setores" in setores_response.json()
-    assert isinstance(setores_response.json()["setores"], list)
+    assert cargos_response.status_code == 200
+    assert "cargos" in cargos_response.json()
+    assert isinstance(cargos_response.json()["cargos"], list)
 
 
 @pytestmark_skip_sem_ad
