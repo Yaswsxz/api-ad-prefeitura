@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Response
+﻿from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from importlib.metadata import version as pkg_version, PackageNotFoundError
 import sys
 
-from app.routers import users, audit
+from app.routers import users, audit, estrutura, identidade
 from app.database import engine, Base, SessionLocal
 from app.core.ldap_connection import get_connection
 from app.core.logging_config import logger
@@ -30,6 +30,8 @@ app.add_middleware(
 # Registra os endpoints (roteadores) da aplicação.
 # users.public_router: endpoints de login/autenticação, sem exigir token prévio.
 # users.router: todos os demais endpoints de usuários, protegidos por JWT.
+app.include_router(estrutura.router)
+app.include_router(identidade.router)
 app.include_router(users.public_router)
 app.include_router(users.router)
 app.include_router(audit.router)

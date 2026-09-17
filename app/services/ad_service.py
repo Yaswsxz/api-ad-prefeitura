@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.core.ldap_connection import get_connection
 from app.core.generators import gerar_login, gerar_senha
 from app.core.logging_config import logger
-from app.schemas.user import UsuarioUpdate, UsuarioOut
+from app.schemas.user import UsuarioOut
 
 # Flags do atributo userAccountControl no Active Directory
 # 512 = conta habilitada | 514 = conta desabilitada (bit 2 = 2)
@@ -230,55 +230,6 @@ def buscar_usuario(login: str) -> UsuarioOut:
         raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
     except Exception as e:
         logger.error(f"Erro inesperado em buscar_usuario (login={login}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
-
-
-def atualizar_usuario(login: str, dados: UsuarioUpdate, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
-    """
-    Atualiza dados de um usuário existente no AD (cargo, email, telefone).
-    """
-    dn_usuario = _resolver_dn(login)
-    mudancas = {}
-
-    if dados.cargo is not None:
-        mudancas["title"] = [(MODIFY_REPLACE, [dados.cargo])]
-    if dados.tipo is not None:
-        mudancas["description"] = [(MODIFY_REPLACE, [dados.tipo])]
-    if dados.email is not None:
-        mudancas["mail"] = [(MODIFY_REPLACE, [dados.email])]
-    if dados.telefone is not None:
-        mudancas["telephoneNumber"] = [(MODIFY_REPLACE, [dados.telefone])]
-
-    if not mudancas:
-        return buscar_usuario(login)
-
-    conn = get_connection()
-    try:
-        ok = conn.modify(dn_usuario, mudancas)
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao atualizar usuário: {conn.result}")
-
-        usuario = buscar_usuario(login)
-
-        _registrar_atividade(
-            operator=operator,
-            action="UPDATE_USER",
-            target_user=login,
-            details={"campos_alterados": dados.model_dump(exclude_unset=True)},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return usuario
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em atualizar_usuario (login={login}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em atualizar_usuario (login={login}): {e}")
         raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
     finally:
         conn.unbind()

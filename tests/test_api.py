@@ -77,9 +77,9 @@ def test_candidatos_teste_sem_token():
     assert response.status_code == 401
 
 
-def test_atualizar_usuario_sem_token():
-    """Atualizar usuário exige autenticação."""
-    response = client.put("/usuarios/algum.login", json={"cargo": "Teste"})
+def test_alterar_pessoa_sem_token():
+    """Alterar pessoa (PATCH /identidade/humanos/{login}) exige autenticação."""
+    response = client.patch("/identidade/humanos/algum.login", json={"cargo": "Teste"})
     assert response.status_code == 401
 
 
