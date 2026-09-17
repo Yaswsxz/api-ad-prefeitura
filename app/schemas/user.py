@@ -1,21 +1,7 @@
-from pydantic import BaseModel, Field
+﻿from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 from enum import Enum
-
-
-class UsuarioCreate(BaseModel):
-    primeiro_nome: str = Field(..., example="Joao")
-    ultimo_nome: str = Field(..., example="Silva")
-    cpf: Optional[str] = Field(None, example="12345678900")
-    cargo: Optional[str] = Field(None, example="Analista Administrativo")
-    tipo: Optional[str] = Field("efetivo", example="efetivo ou estagiario")
-    email: Optional[str] = None  # se não informado, é gerado automaticamente
-    subcontainer: str = Field(
-        ...,
-        example="CODEL",
-        description="Subpasta dentro de Ativos/Inativos (setores válidos: CODEL, CMTU, Planejamento, Ouvidoria, Saude, Sercontel)"
-    )
 
 
 class UsuarioUpdate(BaseModel):
@@ -40,11 +26,7 @@ class UsuarioOut(BaseModel):
     tipo: Optional[str] = None
     ativo: bool
     distinguished_name: str
-    setor: Optional[str] = None   # ← NOVO CAMPO
 
-
-class UsuarioCriadoOut(UsuarioOut):
-    senha_gerada: str
 
 class CampoOrdenacao(str, Enum):
     """Campos disponíveis para ordenação."""
@@ -53,22 +35,12 @@ class CampoOrdenacao(str, Enum):
     EMAIL = "email"
     CARGO = "cargo"
     STATUS = "status"
-    SETOR = "setor"   # ← NOVO
 
 
 class Ordem(str, Enum):
     """Direção da ordenação."""
     ASC = "crescente"
     DESC = "decrescente"
-
-class Setor(str, Enum):
-    """Setores disponíveis (subcontainers dentro de Ativos/Inativos)."""
-    CMTU = "CMTU"
-    CODEL = "CODEL"
-    OUVIDORIA = "Ouvidoria"
-    PLANEJAMENTO = "Planejamento"
-    SAUDE = "Saude"
-    SERRCONTEL = "Sercontel"
 
 
 class EventoLogin(str, Enum):
