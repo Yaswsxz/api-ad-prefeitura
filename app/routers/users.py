@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from app.schemas.user import UsuarioUpdate, UsuarioOut, TrocaSenha, CampoOrdenacao, Ordem
+from app.schemas.user import UsuarioOut, TrocaSenha, CampoOrdenacao, Ordem
 from app.services import ad_service
 from app.database import get_db
 from app.core.auth import criar_token_acesso, get_current_user
@@ -12,12 +12,12 @@ from app.core.config import settings
 
 # Rotas públicas: não exigem token, pois são o próprio ponto de entrada
 # para se autenticar e obter um.
-public_router = APIRouter(prefix="/usuarios", tags=["Usuários"])
+public_router = APIRouter(prefix="/usuarios", tags=["Ferramentas"])
 
 # Rotas protegidas: qualquer chamada exige um token JWT válido no header
 # Authorization: Bearer <token>. Sem token válido, a API responde 401
 # antes mesmo de a função da rota ser executada.
-router = APIRouter(prefix="/usuarios", tags=["Usuários"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/usuarios", tags=["Ferramentas"], dependencies=[Depends(get_current_user)])
 
 
 @public_router.post("/login", summary="Login e geração de token JWT")
@@ -122,26 +122,6 @@ def buscar_usuario(
     Retorna os dados de um único usuário do AD a partir do login (sAMAccountName).
     """
     return ad_service.buscar_usuario(login)
-
-
-@router.put("/{login}", response_model=UsuarioOut, summary="Atualizar dados de um usuário")
-def atualizar_usuario(
-    request: Request,
-    login: str,
-    dados: UsuarioUpdate,
-    db: Session = Depends(get_db),
-    usuario_atual: str = Depends(get_current_user),
-):
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-
-    return ad_service.atualizar_usuario(
-        login,
-        dados,
-        ip_address=client_ip,
-        user_agent=user_agent,
-        operator=usuario_atual
-    )
 
 
 @router.post("/{login}/trocar-senha", summary="Trocar a senha de um usuário")
