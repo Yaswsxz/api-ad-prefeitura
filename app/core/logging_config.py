@@ -3,13 +3,13 @@ import sys
 from datetime import datetime
 
 def setup_logging():
-    """Configura o sistema de logs da aplicaÁ„o."""
+    """Configura o sistema de logs da aplica√ß√£o."""
     
     # Criar logger principal
     logger = logging.getLogger("api_ad")
     logger.setLevel(logging.DEBUG)
     
-    # Formato do log: data - nÌvel - mensagem
+    # Formato do log: data - n√≠vel - mensagem
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
@@ -29,5 +29,5 @@ def setup_logging():
     
     return logger
 
-# Criar inst‚ncia global do logger
+# Criar inst√¢ncia global do logger
 logger = setup_logging()

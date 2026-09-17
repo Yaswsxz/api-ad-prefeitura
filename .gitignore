@@ -7,3 +7,6 @@ __pycache__/
 ad_audit.db
 resultado.txt
 app_backup/
+api_ad.log
+
+api_ad.log
