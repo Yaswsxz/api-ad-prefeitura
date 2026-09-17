@@ -32,6 +32,50 @@ UAC_NORMAL_DESABILITADA = 514
 # ---------------------------------------------------------------------------
 
 
+RAMAIS = {
+    "OPERATIVOS": "OPERATIVOS",
+    "INOPERANTES": "INOPERANTES",
+    "DESINCORPORADOS": "DESINCORPORADOS",
+}
+
+
+RAMAIS_ESPELHADOS = ("OPERATIVOS", "INOPERANTES")
+
+
+def _ramo_do_dn(dn: str) -> str | None:
+    """
+    Retorna 'OPERATIVOS', 'INOPERANTES' ou None se o DN não estiver em nenhum.
+    Comparação exata (case-insensitive) para não confundir com nomes parecidos.
+    """
+    for parte in dn.split(","):
+        p = parte.strip().upper()
+        if p == "OU=OPERATIVOS":
+            return "OPERATIVOS"
+        if p == "OU=INOPERANTES":
+            return "INOPERANTES"
+    return None
+
+
+def _dn_espelhado(dn: str, novo_ramo: str) -> str:
+    """
+    Troca o ramo do DN (OPERATIVOS ↔ INOPERANTES), preservando o resto do caminho.
+    
+    Ex:
+        CN=arthur.thomas,CN=Carreira,OU=FAZENDA,OU=DIRETA,OU=OPERATIVOS,OU=PML,DC=...
+        → (novo_ramo='INOPERANTES')
+        CN=arthur.thomas,CN=Carreira,OU=FAZENDA,OU=DIRETA,OU=INOPERANTES,OU=PML,DC=...
+    """
+    partes = [p.strip() for p in dn.split(",")]
+    for i, p in enumerate(partes):
+        if p.upper() in ("OU=OPERATIVOS", "OU=INOPERANTES"):
+            partes[i] = f"OU={novo_ramo.upper()}"
+            return ",".join(partes)
+    raise HTTPException(
+        status_code=409,
+        detail=f"Pessoa não está sob OPERATIVOS nem INOPERANTES. DN: {dn}",
+    )
+
+
 def _registrar_atividade(operator: str, action: str, target_user: str, details: dict,
                           ip_address: str = None, user_agent: str = None, status: str = "SUCCESS") -> None:
     """
@@ -539,50 +583,86 @@ def mover_usuario(login: str, nova_ou: str) -> bool:
         conn.unbind()
 
 
-def transferir_usuario_setor(login: str, novo_subcontainer: str, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
+def transferir_usuario_setor(
+    login: str,
+    novo_setor: str,
+    ip_address: str = None,
+    user_agent: str = None,
+    operator: str = "system",
+) -> UsuarioOut:
     """
-    Transfere um usuário para outro subcontainer (setor), mantendo o mesmo
-    status (quem está em Ativos permanece em Ativos, quem está em Inativos
-    permanece em Inativos). Usado quando um usuário muda de setor/departamento
-    sem mudar seu status de ativo/inativo.
+    Move a pessoa para outro SETOR (OU do órgão), preservando:
+      - o ramo (OPERATIVOS ou INOPERANTES)
+      - o nível (DIRETA / INDIRETA / TERCEIRIZADAS / PREPOSTOS)
+      - o container (Estágio, Carreira, Comissionados, Não humanos)
+
+    Ex: FAZENDA → EDUCACAO
+        CN=arthur.thomas,CN=Carreira,OU=FAZENDA,OU=DIRETA,OU=OPERATIVOS,OU=PML,DC=...
+        → CN=arthur.thomas,CN=Carreira,OU=EDUCACAO,OU=DIRETA,OU=OPERATIVOS,OU=PML,DC=...
     """
     dn_atual = _resolver_dn(login)
+    usuario = buscar_usuario(login)
+    rdn = f"CN={usuario.nome_completo}"
 
-    # Descobre se o usuário está em Ativos ou Inativos hoje, pelo DN atual
-    if settings.AD_ATIVOS_BASE in dn_atual:
-        base_destino = settings.AD_ATIVOS_BASE
-    elif settings.AD_INATIVOS_BASE in dn_atual:
-        base_destino = settings.AD_INATIVOS_BASE
-    else:
+    partes = [p.strip() for p in dn_atual.split(",")]
+
+    # Localiza o ramo
+    ramo_idx = None
+    for i, p in enumerate(partes):
+        if p.upper() in ("OU=OPERATIVOS", "OU=INOPERANTES"):
+            ramo_idx = i
+            break
+
+    if ramo_idx is None:
         raise HTTPException(
             status_code=409,
-            detail="Não foi possível identificar se o usuário está em Ativos ou Inativos."
+            detail=f"Pessoa não está sob OPERATIVOS nem INOPERANTES. DN: {dn_atual}",
         )
 
-    # Valida se o setor de destino existe de verdade no AD
-    if not _subcontainer_existe(novo_subcontainer, base_destino):
+    # O setor (OU=FAZENDA) fica 2 níveis acima do ramo (tem o nível no meio):
+    #   [setor_idx]      → OU=FAZENDA
+    #   [setor_idx + 1]  → OU=DIRETA
+    #   [ramo_idx]       → OU=OPERATIVOS
+    setor_idx = ramo_idx - 2
+    if setor_idx < 1:
         raise HTTPException(
-            status_code=422,
-            detail=f"Subcontainer '{novo_subcontainer}' não existe. "
-                   f"Consulte GET /usuarios/setores para ver os valores válidos."
+            status_code=409,
+            detail=f"Não foi possível identificar o setor no DN: {dn_atual}",
         )
 
-    novo_dn_base = f"CN={novo_subcontainer},{base_destino}"
+    novas_partes = partes.copy()
+    novas_partes[setor_idx] = f"OU={novo_setor.upper()}"
+    novo_dn = ",".join(novas_partes)
+    novo_parent = novo_dn[len(rdn) + 1:]
 
+    if novo_dn == dn_atual:
+        return usuario  # já está no setor de destino, nada a fazer
+
+    conn = get_connection()
     try:
-        mover_usuario(login, novo_dn_base)
-        usuario = buscar_usuario(login)
+        conn.modify_dn(dn_atual, rdn, new_superior=novo_parent)
+        if conn.result["result"] != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Falha ao mover para o setor {novo_setor}: {conn.result}",
+            )
+
+        usuario_atualizado = buscar_usuario(login)
 
         _registrar_atividade(
             operator=operator,
             action="TRANSFER_SETOR",
             target_user=login,
-            details={"novo_setor": novo_subcontainer, "dn_anterior": dn_atual},
+            details={
+                "novo_setor": novo_setor.upper(),
+                "dn_anterior": dn_atual,
+                "dn_novo": novo_dn,
+            },
             ip_address=ip_address,
             user_agent=user_agent,
         )
 
-        return usuario
+        return usuario_atualizado
     except HTTPException:
         raise
     except LDAPException as e:
@@ -591,6 +671,8 @@ def transferir_usuario_setor(login: str, novo_subcontainer: str, ip_address: str
     except Exception as e:
         logger.error(f"Erro inesperado em transferir_usuario_setor (login={login}): {e}")
         raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
+    finally:
+        conn.unbind()
 
 
 def detectar_inconsistencias() -> list[dict]:
@@ -799,49 +881,67 @@ def deletar_usuarios_em_lote(logins: list[str], ip_address: str = None, user_age
     return {"removidos": sucesso, "erros": erros, "detalhes": resultados}
 
 
-def desabilitar_usuario(login: str, desabilitar: bool = True, ip_address: str = None, user_agent: str = None, operator: str = "system") -> UsuarioOut:
+def desabilitar_usuario(
+    login: str,
+    desabilitar: bool = True,
+    ip_address: str = None,
+    user_agent: str = None,
+    operator: str = "system",
+) -> UsuarioOut:
     """
-    Habilita ou desabilita a conta de um usuário no AD.
-    Ao desabilitar, move o usuário para dentro de Inativos, preservando
-    o mesmo subcontainer (setor) em que ele já estava.
-    Ao habilitar, faz o mesmo movimento de volta para Ativos.
+    Bloqueia/inativa ou desbloqueia/reativa uma pessoa.
+
+    - Bloquear: espelha de OPERATIVOS → INOPERANTES e marca UAC=514.
+    - Desbloquear: espelha de INOPERANTES → OPERATIVOS e marca UAC=512.
+
+    Se a pessoa já está no ramo de destino, apenas ajusta o UAC (idempotente).
     """
-    dn_usuario = _resolver_dn(login)
+    dn_atual = _resolver_dn(login)
+    ramo_atual = _ramo_do_dn(dn_atual)
+
+    if ramo_atual is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Pessoa não está sob OPERATIVOS nem INOPERANTES. DN: {dn_atual}",
+        )
+
     novo_uac = UAC_NORMAL_DESABILITADA if desabilitar else UAC_NORMAL_ATIVO
-    acao = "DISABLE_USER" if desabilitar else "ENABLE_USER"
-
-    # Descobre o subcontainer atual (ex: CODEL) a partir do DN do usuário,
-    # para preservar o setor dele ao mover entre Ativos/Inativos.
-    partes = dn_usuario.split(",")
-    subcontainer_atual = partes[1].replace("CN=", "") if len(partes) > 1 else None
-
-    base_destino = settings.AD_INATIVOS_BASE if desabilitar else settings.AD_ATIVOS_BASE
-    if subcontainer_atual:
-        ou_destino = f"CN={subcontainer_atual},{base_destino}"
-    else:
-        ou_destino = base_destino
+    acao = "BLOCK_PERSON" if desabilitar else "UNBLOCK_PERSON"
+    ramo_alvo = "INOPERANTES" if desabilitar else "OPERATIVOS"
 
     conn = get_connection()
     try:
-        # 1. Altera o status da conta
-        ok = conn.modify(dn_usuario, {"userAccountControl": [(MODIFY_REPLACE, [novo_uac])]})
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao alterar status da conta: {conn.result}")
+        # 1. Ajusta o userAccountControl
+        conn.modify(dn_atual, {"userAccountControl": [(MODIFY_REPLACE, [novo_uac])]})
+        if conn.result["result"] != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Falha ao alterar status da conta: {conn.result}",
+            )
 
-        # 2. Move o usuário para a OU correta
-        mover_usuario(login, ou_destino)
+        # 2. Se precisa mudar de ramo, espelha o DN e move
+        if ramo_atual != ramo_alvo:
+            novo_dn = _dn_espelhado(dn_atual, ramo_alvo)
+            rdn = novo_dn.split(",")[0]
+            novo_parent = novo_dn[len(rdn) + 1:]
 
-        # 3. Busca os dados atualizados
+            conn.modify_dn(dn_atual, rdn, new_superior=novo_parent)
+            if conn.result["result"] != 0:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Falha ao mover para {ramo_alvo}: {conn.result}",
+                )
+
         usuario = buscar_usuario(login)
 
-        # 4. Registra a ação no banco de auditoria
         _registrar_atividade(
             operator=operator,
             action=acao,
             target_user=login,
             details={
-                "status": "desabilitado" if desabilitar else "habilitado",
-                "ou_destino": ou_destino
+                "status": "inativo" if desabilitar else "ativo",
+                "dn_anterior": dn_atual,
+                "ramo": ramo_alvo,
             },
             ip_address=ip_address,
             user_agent=user_agent,
@@ -912,3 +1012,4 @@ def registrar_logout(login: str, ip_address: str = None, user_agent: str = None)
         db.close()
     except Exception as e:
         logger.error(f"Erro ao registrar logout (login={login}): {e}")
+

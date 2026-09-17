@@ -7,14 +7,16 @@ class Settings(BaseSettings):
     AD_SERVER: str = "ldap://192.168.0.1"
     AD_DOMAIN: str = "prefeitura.local"
     AD_BASE_DN: str = "DC=prefeitura,DC=local"
-    AD_ATIVOS_BASE: str = os.getenv("AD_ATIVOS_BASE", "")
-    AD_INATIVOS_BASE: str = os.getenv("AD_INATIVOS_BASE", "")
     AD_SEARCH_BASE: str = os.getenv("AD_SEARCH_BASE", "")
     AD_USER_OU: str = "OU=Funcionarios,DC=prefeitura,DC=local"
     AD_BIND_USER: str = "svc_api@prefeitura.local"
     AD_BIND_PASSWORD: str = ""
     TEST_AD_USER: str = ""
     TEST_AD_PASSWORD: str = ""
+    AD_PML_BASE: str = ""
+    AD_OPERATIVOS_BASE: str = ""
+    AD_INOPERANTES_BASE: str = ""
+    AD_DESINCORPORADOS_BASE: str = ""
 
     # --- Banco de Dados ---
     DATABASE_URL: str = "sqlite:///./ad_audit.db"
