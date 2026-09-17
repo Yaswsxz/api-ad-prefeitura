@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -26,12 +26,6 @@ def test_listar_usuarios_sem_token():
     """
     response = client.get("/usuarios")
     assert response.status_code == 401
-
-
-def test_criar_usuario_sem_dados():
-    """Sem token, mesmo um corpo vazio/inválido deve barrar por autenticação."""
-    response = client.post("/usuarios", json={})
-    assert response.status_code in [401, 422]
 
 
 def test_auditoria():
@@ -71,29 +65,11 @@ def test_login_sem_dados():
     assert response.status_code == 422
 
 
-# --- Testes novos: endpoints adicionados na sessão de hoje ---
+# --- Testes dos endpoints que sobreviveram à limpeza ---
 # Cada um confirma que a proteção por token está realmente aplicada.
 # Não testam o "caminho de sucesso" (login válido + ação concluída) porque
 # isso exigiria credenciais reais de AD dentro do código de teste — o mesmo
 # tipo de risco que já causamos e corrigimos hoje (senha exposta em script).
-
-def test_setores_sem_token():
-    """Listar setores exige autenticação."""
-    response = client.get("/usuarios/setores")
-    assert response.status_code == 401
-
-
-def test_inconsistencias_sem_token():
-    """Detectar inconsistências exige autenticação."""
-    response = client.get("/usuarios/inconsistencias")
-    assert response.status_code == 401
-
-
-def test_corrigir_inconsistencias_sem_token():
-    """Corrigir inconsistências em lote exige autenticação."""
-    response = client.post("/usuarios/inconsistencias/corrigir")
-    assert response.status_code == 401
-
 
 def test_candidatos_teste_sem_token():
     """Listar candidatos a conta de teste exige autenticação."""
@@ -101,35 +77,10 @@ def test_candidatos_teste_sem_token():
     assert response.status_code == 401
 
 
-def test_deletar_lote_sem_token():
-    """Deletar em lote exige autenticação, mesmo com um corpo válido."""
-    response = client.post("/usuarios/deletar-lote", json={"logins": ["qualquer.login"]})
+def test_atualizar_usuario_sem_token():
+    """Atualizar usuário exige autenticação."""
+    response = client.put("/usuarios/algum.login", json={"cargo": "Teste"})
     assert response.status_code == 401
-
-
-def test_transferir_setor_sem_token():
-    """Transferir usuário de setor exige autenticação."""
-    response = client.post(
-        "/usuarios/algum.login/transferir-setor",
-        params={"novo_subcontainer": "CODEL"},
-    )
-    assert response.status_code == 401
-
-
-def test_habilitar_desabilitar_sem_token():
-    """Habilitar e desabilitar usuário exigem autenticação."""
-    resp_desabilitar = client.post("/usuarios/algum.login/desabilitar")
-    resp_habilitar = client.post("/usuarios/algum.login/habilitar")
-    assert resp_desabilitar.status_code == 401
-    assert resp_habilitar.status_code == 401
-
-
-def test_atualizar_remover_usuario_sem_token():
-    """Atualizar e remover usuário exigem autenticação."""
-    resp_put = client.put("/usuarios/algum.login", json={"cargo": "Teste"})
-    resp_delete = client.delete("/usuarios/algum.login")
-    assert resp_put.status_code == 401
-    assert resp_delete.status_code == 401
 
 
 def test_trocar_senha_sem_token():
@@ -151,3 +102,17 @@ def test_auth_publico_nao_exige_token():
         # Confirma que foi bloqueado por credencial errada, não por falta de token
         # (a mensagem do bloqueio por token é sempre "Not authenticated")
         assert response.json().get("detail") != "Not authenticated"
+
+
+# --- Testes dos novos endpoints de OU/Pessoa (Direta/Indireta/Terceirizadas/Prepostos) ---
+
+def test_criar_ou_sem_token():
+    """Criar OU exige autenticação."""
+    response = client.post("/estrutura/unidades/direta", json={"nome": "TESTE"})
+    assert response.status_code == 401
+
+
+def test_criar_pessoa_sem_token():
+    """Criar pessoa exige autenticação."""
+    response = client.post("/identidade/humanos", json={"tipo": "Estagio", "unidade": "TESTE"})
+    assert response.status_code == 401
