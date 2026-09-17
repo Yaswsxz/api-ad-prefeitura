@@ -219,7 +219,7 @@
 		- name = mínimo 5 caracteres. ^[A-Z][a-z]+\s[A-Z][a-z]+$
 
 
---
+---
 
 
 - Alterar Servidor de Carreira (PATCH /identidade/humanos/carreira/{id})
@@ -229,7 +229,7 @@
 		- Não é possível alterar fora da árvore Operativos
 
 
---
+---
 
 
 - Destituir Servidor de Carreira (DELETE /identidade/humanos/carreira/{id})
@@ -241,7 +241,7 @@
 		- Somente é possível destituir da árvore "Operativos"
 
 
---
+---
 
 
 - Criar Comissionado (POST /identidade/humanos/comissionado)
@@ -263,7 +263,7 @@
 		- Não é possível alterar fora da árvore Operativos
 
 
---
+---
 
 
 - Destituir Comissionado (DELETE /identidade/humanos/comissionado/{id})
@@ -275,7 +275,7 @@
 		- Somente é possível destituir da árvore "Operativos"
 
 
---
+---
 
 
 - Criar Não Humano (POST /identidade/naohumanos)
@@ -288,7 +288,7 @@
 		- name = mínimo 5 caracteres. ^[a-z]{5,}
 
 
---
+---
 
 
 - Alterar Não Humano (PATCH /identidade/naohumanos/{id})
@@ -298,7 +298,7 @@
 		- Não é possível alterar fora da árvore "Desincorporados"
 
 
---
+---
 
 
 - Bloquear Não Humano (PATCH /identidade/naohumanos/{id})
@@ -308,7 +308,7 @@
 		- Não é possível alterar fora da árvore "Desincorporados"
 
 
---
+---
 
 
 - Remover Não Humano (DELETE /identidade/naohumanos/{id})
@@ -316,7 +316,7 @@
 	- Remove fisicamente o não humano da base do Active Directory
 
 
---
+---
 
 
 - Bloquear Humano (PATCH /identidade/humanos/{id})
@@ -326,7 +326,7 @@
 		- Não é possível alterar fora da árvore "Desincorporados"
 
 
---
+---
 
 
 
