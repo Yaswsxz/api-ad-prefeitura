@@ -76,7 +76,7 @@ def fase1_esqueleto(dry_run: bool = False):
     conn = get_connection()
     try:
         for arvore in ARVORES:
-            dn_arvore = f"CN={arvore},{settings.AD_PML_BASE}"
+            dn_arvore = f"OU={arvore},{settings.AD_PML_BASE}"
             if dry_run:
                 print(f"[DRY-RUN] criaria: {dn_arvore}")
             else:
@@ -90,7 +90,7 @@ def fase1_esqueleto(dry_run: bool = False):
                 continue
 
             for ramo in RAMOS:
-                dn_ramo = f"CN={ramo},{dn_arvore}"
+                dn_ramo = f"OU={ramo},{dn_arvore}"
                 if dry_run:
                     print(f"[DRY-RUN] criaria: {dn_ramo}")
                 else:
