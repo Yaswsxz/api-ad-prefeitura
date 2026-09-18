@@ -68,6 +68,29 @@ def _unidade_existe(conn, dn: str) -> bool:
     return len(conn.entries) > 0
 
 
+def _atributo_nome_orgao(conn) -> str:
+    """
+    O documento da API sugere gravar o nome descritivo do órgão no
+    atributo customizado 'pmlNomeOrgao' — mas esse atributo só existe
+    de verdade se alguém já estendeu o schema do AD pra criá-lo (isso
+    exige permissão de Schema Admin, não é algo que a API resolve
+    sozinha). Enquanto isso não acontece, usamos 'description' (atributo
+    padrão que todo objeto do AD já tem) como alternativa temporária —
+    e volta a usar 'pmlNomeOrgao' automaticamente assim que o schema for
+    estendido, sem precisar mexer em código de novo.
+    """
+    try:
+        schema = conn.server.schema
+        if schema and schema.attribute_types:
+            for attr_type in schema.attribute_types.values():
+                nomes = attr_type.name if isinstance(attr_type.name, list) else [attr_type.name]
+                if nomes and "pmlNomeOrgao" in nomes:
+                    return "pmlNomeOrgao"
+    except Exception as e:
+        logger.warning(f"Não foi possível checar o schema do AD para pmlNomeOrgao, usando 'description': {e}")
+    return "description"
+
+
 def criar_ou(ramo: RamoOU, dados: OUCreate, ip_address: str = None, user_agent: str = None,
              operator: str = "system") -> OUOut:
     """
@@ -85,10 +108,17 @@ def criar_ou(ramo: RamoOU, dados: OUCreate, ip_address: str = None, user_agent: 
         if _unidade_existe(conn, dn_operativos):
             raise HTTPException(status_code=409, detail=f"Já existe uma unidade '{dados.nome}' em Operativos/{ramo.value}")
 
+        atributo_nome_orgao = _atributo_nome_orgao(conn)
+        if atributo_nome_orgao == "description":
+            logger.warning(
+                "Atributo 'pmlNomeOrgao' não existe no schema do AD — gravando o nome "
+                "descritivo em 'description' até o schema ser estendido."
+            )
+
         atributos = {
             "objectClass": ["top", "container"],
             "cn": dados.nome,
-            "pmlNomeOrgao": pml_nome_orgao,
+            atributo_nome_orgao: pml_nome_orgao,
         }
 
         for dn in (dn_operativos, dn_inoperantes):
@@ -147,7 +177,7 @@ def alterar_ou(ramo: RamoOU, nome: str, dados: OUUpdate, ip_address: str = None,
                        f"(não é possível alterar unidades desincorporadas)",
             )
 
-        ok = conn.modify(dn_operativos, {"pmlNomeOrgao": [(MODIFY_REPLACE, [dados.pml_nome_orgao])]})
+        ok = conn.modify(dn_operativos, {_atributo_nome_orgao(conn): [(MODIFY_REPLACE, [dados.pml_nome_orgao])]})
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao alterar unidade: {conn.result}")
 

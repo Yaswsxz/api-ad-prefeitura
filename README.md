@@ -1,23 +1,32 @@
 # API de Gerenciamento de Usuários - Active Directory
 
-API RESTful para gerenciar usuários no Active Directory da Prefeitura de Londrina, com auditoria completa de todas as ações.
+API RESTful para gerenciar a estrutura organizacional e as identidades no Active Directory da Prefeitura de Londrina, com auditoria completa de todas as ações.
 
 ## Índice
 
 - [Sobre o Projeto](#sobre-o-projeto)
+- [Estrutura do Active Directory](#estrutura-do-active-directory)
 - [Instalação e Configuração](#instalação-e-configuração)
 - [Endpoints da API](#endpoints-da-api)
 - [Exemplo de Requisição](#exemplo-de-requisição)
-- [Setores e Consistência](#setores-e-consistência)
+- [Montando a Árvore no AD](#montando-a-árvore-no-ad)
 - [Troubleshooting](#troubleshooting)
 - [Problemas Conhecidos](#problemas-conhecidos)
 - [Auditoria e LGPD](#auditoria-e-lgpd)
 - [Estrutura do Projeto](#estrutura-do-projeto)
+- [Fluxo de Contribuição (Git)](#fluxo-de-contribuição-git)
 - [Autora](#autora)
 
 ## Sobre o Projeto
 
-Automatiza o gerenciamento de usuários no AD da prefeitura: criar, editar, remover e consultar contas; trocar senhas; habilitar/desabilitar e transferir entre setores; detectar e corrigir inconsistências de status; identificar contas de teste (sempre com revisão manual antes de remover); autenticar usuários; e registrar auditoria completa de tudo isso.
+Automatiza o gerenciamento do Active Directory da prefeitura em dois níveis:
+
+- **Estrutura organizacional (OUs)**: criar e alterar órgãos dentro dos 4 ramos (Direta, Indireta, Terceirizadas, Prepostos), e desincorporar/remover unidades que deixaram de existir.
+- **Identidades (Pessoas)**: criar e alterar estagiários, servidores de carreira, comissionados e contas não-humanas (impressoras, sistemas) dentro de cada unidade da Direta.
+
+Além disso: consulta/busca de contas, troca de senha, autenticação, logout, e registro de auditoria completa de tudo isso.
+
+**Divisão de trabalho:** este repositório é mantido por duas pessoas estagiárias. Eu (Yasmin) sou responsável por Criar OU, Alterar/Mover OU, Criar Pessoa e Alterar Pessoa (routers `estrutura` e `identidade`); o restante das operações da API é responsabilidade do outro estagiário.
 
 **Camadas do projeto:** `routers/` (endpoints e validação) → `services/` (regras de negócio) → `core/` (conexão LDAP, config, JWT, logs). Os dados de auditoria ficam num banco SQLite separado do Active Directory.
 
@@ -25,9 +34,32 @@ Automatiza o gerenciamento de usuários no AD da prefeitura: criar, editar, remo
 
 ## Estrutura do Active Directory
 
-A API opera dentro de `OU=DESENVOL > OU=PML`, que contém os containers `CN=Ativos` e `CN=Inativos` — cada um com os mesmos subsetores dentro (`CODEL`, `CMTU`, `Planejamento`, `Ouvidoria`, `Saude`, `Sercontel`).
+Em set/2026 a árvore do AD foi reestruturada. O modelo antigo (`CN=Ativos` / `CN=Inativos`, com subsetores soltos como `CODEL`, `CMTU`) foi substituído por uma árvore com 3 troncos, cada um com os mesmos 4 ramos:
 
-**Atenção:** esses subsetores são **containers** (`CN=`), não Organizational Units (`OU=`) — usar `OU=` no lugar de `CN=` gera erro `noSuchObject`. O campo `subcontainer` precisa ser um dos nomes reais já existentes; consulte `GET /usuarios/setores` para a lista atualizada (a API valida contra o AD em tempo real, então setores novos já são reconhecidos automaticamente).
+```
+PML
+ ├── Operativos        (estrutura ativa)
+ ├── Inoperantes        (espelho 1:1 de Operativos — recebe quem sai de operação)
+ └── Desincorporados    (só para OU que deixou de existir de fato — caso raro)
+      └── cada um dos 3 acima tem: Direta / Indireta / Terceirizadas / Prepostos
+```
+
+Dentro de cada unidade do ramo **Direta** (ex: `Fazenda`, `Educação`), existem 4 subcontainers fixos, criados automaticamente ao criar a unidade: `Estagio`, `Carreira`, `Comissionados`, `NaoHumanos`. Os outros 3 ramos (Indireta, Terceirizadas, Prepostos) não têm essa subdivisão.
+
+**Mapeamento dos setores antigos para os ramos novos** (confirmado com o supervisor):
+
+| Ramo | Unidades |
+|---|---|
+| Direta | Fazenda, Educação, Planejamento, Procuradoria, Ouvidoria, Secretaria Municipal de Saúde |
+| Indireta | CODEL, CMTU, COHAB, ACESF, CAAPSML, FEL, IPPUL, Autarquia Municipal de Saúde (AMS), Sercomtel |
+| Terceirizadas | *(nenhuma confirmada ainda)* |
+| Prepostos | Cartório do Segundo Ofício |
+
+**Atenção:** os nós da árvore são **containers** (`CN=`), não Organizational Units (`OU=`) — usar `OU=` no lugar de `CN=` gera erro `noSuchObject`.
+
+**Sem DELETE físico de pessoa por padrão:** quando alguém deixa de ser operante, ela é movida da árvore `Operativos` para a mesma posição em `Inoperantes` (nunca apagada). Remoção física só é permitida a partir de `Inoperantes` (pessoa) ou `Desincorporados` (OU), como trava de segurança.
+
+**Atributo `pmlNomeOrgao`:** o nome descritivo do órgão (ex.: "Secretaria Municipal da Fazenda") deveria ficar num atributo customizado chamado `pmlNomeOrgao`. Esse atributo ainda **não foi criado no schema do AD** (precisa de permissão de Schema Admin). Enquanto isso não acontece, a API detecta a ausência automaticamente e usa o atributo padrão `description` no lugar — volta a usar `pmlNomeOrgao` sozinha assim que o schema for estendido, sem precisar alterar código.
 
 ## Instalação e Configuração
 
@@ -52,12 +84,13 @@ Crie um `.env` na raiz (baseado em `.env.example`):
 AD_SERVER=ldap://seu-servidor-ad
 AD_DOMAIN=seu-dominio.local
 AD_BASE_DN=OU=DESENVOL,DC=seu-dominio,DC=local
-AD_ATIVOS_BASE=CN=Ativos,OU=PML,OU=DESENVOL,DC=seu-dominio,DC=local
-AD_INATIVOS_BASE=CN=Inativos,OU=PML,OU=DESENVOL,DC=seu-dominio,DC=local
 AD_SEARCH_BASE=OU=DESENVOL,DC=seu-dominio,DC=local
 AD_USER_OU=OU=DESENVOL,DC=seu-dominio,DC=local
 AD_BIND_USER=dominio\usuario_servico
 AD_BIND_PASSWORD=sua_senha
+
+# Raiz da árvore nova (Operativos/Inoperantes/Desincorporados ficam dentro dela)
+AD_PML_BASE=OU=PML,OU=DESENVOL,DC=seu-dominio,DC=local
 
 # Opcional — só para os testes de caminho de sucesso (test_success_path.py).
 # Sem isso configurado, esses testes são pulados automaticamente.
@@ -67,7 +100,7 @@ TEST_AD_PASSWORD=sua_senha_de_teste
 DATABASE_URL=sqlite:///./ad_audit.db
 ```
 
-`AD_BASE_DN`, `AD_ATIVOS_BASE` e `AD_INATIVOS_BASE` precisam refletir exatamente a hierarquia real do AD (ver acima) — um caminho incompleto causa `noSuchObject` mesmo com o resto correto.
+`AD_BASE_DN` e `AD_PML_BASE` precisam refletir exatamente a hierarquia real do AD — um caminho incompleto causa `noSuchObject` mesmo com o resto correto.
 
 ```bash
 py -3.11 -m uvicorn app.main:app --reload   # API em http://localhost:8000
@@ -78,26 +111,38 @@ py -3.11 -m pytest tests/ -v                 # rodar os testes
 
 **Status** (sem autenticação): `GET /`, `GET /health` (checa AD + banco de auditoria, 200 ou 503), `GET /versao`.
 
-### Usuários — prefixo `/usuarios`
+### Estrutura (OU) — prefixo `/estrutura/unidades`
+
+`{ramo_path}` é um de: `direta`, `indireta`, `terceirizada`, `preposto`.
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| GET | `/setores` | Setores reais existentes dentro de Ativos |
-| GET | `/cargos` | Cargos distintos já cadastrados |
-| GET | `/inconsistencias` | Usuários com status divergente da pasta onde estão |
-| POST | `/inconsistencias/corrigir` | Corrige as inconsistências detectadas |
-| GET | `/candidatos-teste` | Sinaliza possíveis contas de teste (não remove nada) |
-| POST | `/deletar-lote` | Remove os logins explicitamente informados |
-| GET | `` | Lista/busca com filtros: `nome`, `cargo`, `setor`, `email`, `ativo`, `ordenar_por`, `ordem` |
-| GET | `/{login}` | Consulta um usuário |
-| POST | `` | Cria um usuário |
-| PUT | `/{login}` | Atualiza cargo, tipo, email, telefone |
-| DELETE | `/{login}` | Remove um usuário |
-| POST | `/{login}/trocar-senha` | Troca a senha |
-| POST | `/{login}/desabilitar` | Desativa e move para Inativos |
-| POST | `/{login}/habilitar` | Reativa e move para Ativos |
-| POST | `/{login}/transferir-setor` | Move para outro setor, mantendo o status |
+| POST | `/{ramo_path}` | Cria uma unidade em Operativos e Inoperantes ao mesmo tempo (se Direta, já cria os 4 subcontainers) |
+| PATCH | `/{ramo_path}/{nome}` | Altera o nome descritivo (só se a unidade estiver em Operativos) |
+| PATCH | `/{ramo_path}/{nome}/desincorporar` | Move a unidade de Operativos para Desincorporados |
+| DELETE | `/{ramo_path}/{nome}` | Remove fisicamente — só se já estiver em Desincorporados |
+
+### Identidade (Pessoa) — prefixo `/identidade`
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| POST | `/humanos` | Cria Estagio/Carreira/Comissionados/NaoHumanos numa unidade da Direta — nasce em Inoperantes, bloqueada |
+| PATCH | `/humanos/{login}` | Altera dados — só se já estiver em Operativos |
+| DELETE | `/humanos/{login}` | Remove fisicamente — só se já estiver em Inoperantes |
+
+### Ferramentas — prefixo `/usuarios`
+
+Busca, autenticação e utilitários que não dependem da árvore nova.
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| POST | `/login` | Login e geração de token JWT |
 | POST | `/auth` | Autentica no AD sem gerar token |
+| GET | `/cargos` | Cargos distintos já cadastrados |
+| GET | `/candidatos-teste` | Sinaliza possíveis contas de teste (não remove nada) |
+| GET | `` | Lista/busca com filtros: `nome`, `cargo`, `email`, `ativo`, `ordenar_por`, `ordem` |
+| GET | `/{login}` | Consulta um usuário |
+| POST | `/{login}/trocar-senha` | Troca a senha |
 | POST | `/{login}/logout` | Registra logout |
 
 ### Auditoria — prefixo `/auditoria`
@@ -114,77 +159,109 @@ Documentação interativa: `/docs` (Swagger) e `/redoc`.
 
 ## Exemplo de Requisição
 
-`POST /usuarios` (campos obrigatórios: `primeiro_nome`, `ultimo_nome`, `subcontainer` — este último precisa ser um valor real, veja `GET /usuarios/setores`):
+**Criar uma OU** — `POST /estrutura/unidades/direta`:
 
 ```json
 {
-  "primeiro_nome": "Joao",
-  "ultimo_nome": "Silva",
-  "cpf": "12345678900",
-  "cargo": "Analista Administrativo",
-  "tipo": "efetivo",
-  "email": "joao.silva@londrina.pr.gov.br",
-  "subcontainer": "CODEL"
+  "nome": "FAZENDA",
+  "pml_nome_orgao": "Secretaria Municipal da Fazenda"
 }
 ```
 
-Resposta (201) — a conta é criada **desabilitada** por padrão, e a senha só é aplicada de verdade se a conexão suportar TLS (ver [Problemas Conhecidos](#problemas-conhecidos)):
+**Criar uma pessoa** — `POST /identidade/humanos` (nasce em Inoperantes, bloqueada):
+
+```json
+{
+  "tipo": "Estagio",
+  "unidade": "FAZENDA",
+  "primeiro_nome": "Joao",
+  "ultimo_nome": "Silva",
+  "cargo": "Estagiário de TI",
+  "email": "joao.silva@londrina.pr.gov.br"
+}
+```
+
+Resposta (201):
 
 ```json
 {
   "login": "joao.silva",
-  "nome_completo": "Joao Silva",
+  "nome": "Joao Silva",
+  "tipo": "Estagio",
+  "unidade": "FAZENDA",
   "ativo": false,
-  "distinguished_name": "CN=Joao Silva,CN=CODEL,CN=Ativos,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br",
+  "distinguished_name": "CN=Joao Silva,CN=Estagio,CN=FAZENDA,CN=Direta,CN=Inoperantes,OU=PML,OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br",
   "senha_gerada": "SenhaGerada123!"
 }
 ```
 
-`tipo` (`efetivo`/`estagiario`) fica salvo no AD (`description`). `cpf` não vai pro AD, só para a auditoria.
+Não-humanos (`"tipo": "NaoHumanos"`) usam `nao_humano_categoria` + `nao_humano_identificador` (ex.: `sistema` + `contas` → login `nhu.sistema.contas`) em vez de nome/sobrenome, e não recebem `senha_gerada`.
 
-## Setores e Consistência
+## Montando a Árvore no AD
 
-- **Transferir setor**: `POST /usuarios/{login}/transferir-setor?novo_subcontainer=Saude` — mantém o status atual (Ativos ↔ Inativos não muda).
-- **Inconsistências**: um usuário é inconsistente quando `userAccountControl` não bate com a pasta onde está (ex: desabilitado mas ainda em `Ativos`). `GET /usuarios/inconsistencias` lista, `POST /usuarios/inconsistencias/corrigir` resolve.
-- **Contas de teste**: sempre em duas etapas — `GET /usuarios/candidatos-teste` sugere, `POST /usuarios/deletar-lote` remove só o que você confirmar (`{"logins": ["usuario.teste"]}`).
+`scripts/criar_estrutura_ad.py` monta o esqueleto completo e as unidades conhecidas, em duas fases:
+
+```bash
+py -3.11 scripts\criar_estrutura_ad.py --dry-run          # só mostra o que faria
+py -3.11 scripts\criar_estrutura_ad.py --so-esqueleto      # só os containers vazios
+py -3.11 scripts\criar_estrutura_ad.py                     # esqueleto + unidades
+```
+
+Editar a lista `UNIDADES` no topo do script conforme novos órgãos forem confirmados.
 
 ## Troubleshooting
 
 **`ValueError: unsupported hash type MD4`** — falta `pycryptodome` (NTLM depende de MD4, removido do OpenSSL recente). `pip install pycryptodome` e reinicie o servidor.
 
-**`{'result': 32, 'noSuchObject'}`** — caminho (DN) inválido: `.env` incompleto, `OU=` no lugar de `CN=`, ou `subcontainer` inexistente. Confira `GET /usuarios/setores`.
+**`{'result': 32, 'noSuchObject'}`** — caminho (DN) inválido: `.env` incompleto, `OU=` no lugar de `CN=`, ou `AD_PML_BASE` errado.
 
-**`{'result': 64, 'namingViolation'}` ao mover/desabilitar/habilitar** — *(corrigido)* era `modify_dn` recebendo o caminho completo em vez de só o RDN. Hoje usa `new_superior` corretamente.
+**`invalid attribute type pmlNomeOrgao`** — atributo customizado ainda não existe no schema do AD. A API já cai automaticamente para `description` nesse caso (ver [Estrutura do Active Directory](#estrutura-do-active-directory)); se o erro persistir, confirme que está rodando a versão mais recente de `estrutura_service.py`.
 
-**API não reflete mudanças mesmo com `--reload`** — processo antigo do uvicorn ainda rodando: `netstat -ano | findstr :8000`, depois `taskkill /F /IM python.exe`.
+**`{'result': 64, 'namingViolation'}` ao mover** — *(corrigido)* era `modify_dn` recebendo o caminho completo em vez de só o RDN. Hoje usa `new_superior` corretamente.
+
+**API não reflete mudanças mesmo com `--reload`, ou "Failed to fetch" no Swagger** — quase sempre processo antigo do uvicorn ainda rodando em outro terminal (comum depois de trocar de terminal várias vezes). No Windows: `Get-Process python* | Stop-Process -Force`, depois suba de novo com um terminal só.
 
 **Erro genérico "Internal Server Error"** — veja o traceback no terminal do uvicorn e o `api_ad.log`.
 
+**Pylance sublinhando imports como "could not be resolved"** — o VS Code está apontando pra um interpretador Python diferente do que tem os pacotes instalados. `Ctrl+Shift+P` → "Python: Select Interpreter" → escolhe o do `venv`, e `Ctrl+Shift+P` → "Developer: Reload Window".
+
 ## Problemas Conhecidos
 
-**Troca de senha e reabilitação falham silenciosamente sem TLS.** O AD recusa a extensão de troca de senha em conexões sem criptografia. A API já tenta StartTLS automaticamente, mas o controlador de domínio de testes (Windows Server 2003) recusa essa negociação — provavelmente por falta de certificado configurado. Não é problema de permissão da conta de serviço, como se suspeitava antes.
+**Troca de senha e reabilitação falham silenciosamente sem TLS.** O AD recusa a extensão de troca de senha em conexões sem criptografia. A API já tenta StartTLS automaticamente, mas o controlador de domínio recusa essa negociação — provavelmente por falta de certificado configurado. Ainda não confirmado com o administrador do domínio se dá pra configurar certificado TLS (LDAPS na 636, ou StartTLS na 389).
 
-**Próximo passo:** confirmar com o administrador do domínio se dá pra configurar certificado TLS (LDAPS na 636, ou StartTLS na 389). Ainda não confirmado se o AD de produção tem o mesmo problema.
+**Atributo `pmlNomeOrgao` não existe no schema do AD.** Pendente de extensão de schema por quem tem permissão de Schema Admin. Workaround atual: a API usa `description` como substituto (ver acima).
 
 ## Auditoria e LGPD
 
-Toda ação é registrada no SQLite: quem fez (`username`), o quê (`action`, `target_user`), quando (`timestamp`), de onde (`ip_address`, `user_agent`), e se deu certo (`status`). O CPF informado na criação de usuário só fica no banco de auditoria (`ad_audit.db`, fora do Git) — nunca em log ou resposta de erro. Acesso ao servidor e aos endpoints de auditoria deve ser restrito a pessoal autorizado.
+Toda ação é registrada no SQLite: quem fez (`username`), o quê (`action`, `target_user`), quando (`timestamp`), de onde (`ip_address`, `user_agent`), e se deu certo (`status`). O CPF informado na criação de pessoa só fica no banco de auditoria (`ad_audit.db`, fora do Git) — nunca em log ou resposta de erro. Acesso ao servidor e aos endpoints de auditoria deve ser restrito a pessoal autorizado.
 
 ## Estrutura do Projeto
 
 ```
 app/
 ├── core/          # config, conexão LDAP (com StartTLS), JWT, logs
-├── routers/       # users.py, audit.py
-├── schemas/       # user.py, audit.py
-├── services/      # ad_service.py
+├── routers/       # estrutura.py, identidade.py, users.py, audit.py
+├── schemas/       # estrutura.py, identidade.py, user.py, audit.py
+├── services/      # estrutura_service.py, identidade_service.py, ad_service.py
 ├── audit_service.py
 ├── database.py
 └── main.py        # inclui /, /health, /versao
 
-scripts/    # scripts auxiliares de investigação/diagnóstico do AD
+scripts/
+├── criar_estrutura_ad.py   # monta o esqueleto + unidades no AD
+├── investigar_ad.py
+├── listar_ous.py
+└── verificar_env.py
+
 tests/      # test_api.py, test_ad.py, test_success_path.py
 ```
+
+## Fluxo de Contribuição (Git)
+
+Dois remotos: `origin` (GitHub, espelho público, `main` sem proteção) e `gitlab` (repositório oficial da prefeitura, `main` protegida).
+
+- **GitHub:** push direto, sem branch — `git push origin <branch-local>:main --force` quando precisar sincronizar.
+- **GitLab:** branch diária no padrão `correcoes-DD-MM`, criada a partir de `gitlab/main`, com Merge Request pra `main` (obrigatório, já que a branch é protegida).
 
 ## Autora
 
