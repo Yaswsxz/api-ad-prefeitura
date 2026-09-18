@@ -70,9 +70,17 @@ UNIDADES = {
 }
 
 
-# =============================================================================
-# Helpers — agora com CN= ou OU= conforme o tipo
-# =============================================================================
+def fase1_esqueleto(dry_run: bool = False):
+    print("=== FASE 1: esqueleto (Operativos/Inoperantes/Desincorporados + 4 ramos) ===")
+    conn = get_connection()
+    try:
+        for arvore in ARVORES:
+            dn_arvore = f"OU={arvore},{settings.AD_PML_BASE}"
+            if dry_run:
+                print(f"[DRY-RUN] criaria: {dn_arvore}")
+            else:
+                _criar_container(conn, dn_arvore, arvore)
+                print(f"OK  {dn_arvore}")
 
 def _existe(conn, parent_dn: str, nome: str) -> bool:
     """Verifica filho direto com CN=<nome> OU OU=<nome>."""
@@ -225,74 +233,13 @@ def garantir_unidades(conn, dry_run: bool) -> dict:
                 resultado["existentes"].append(f"{ramo.value}/{nome}")
                 continue
 
-            if dry_run:
-                if not existe_op:
-                    print(f"    [DRY]  criaria OU={nome},{parent_op}  (+ subcontainers)")
-                if not existe_inop:
-                    print(f"    [DRY]  criaria OU={nome},{parent_inop}  (+ subcontainers)")
-                continue
-
-            # Cria cada um que falta
-            try:
-                for existe, parent, arvore in [
-                    (existe_op, parent_op, "Operativos"),
-                    (existe_inop, parent_inop, "Inoperantes"),
-                ]:
-                    if existe:
-                        continue
-                    # Atributo pmlNomeOrgao ainda não existe no schema do AD.
-                    # Criamos sem ele; quando o schema for estendido, usamos o PATCH /estrutura/unidades/<ramo>/<nome>.
-                    extras = None
-                    dn_unidade = _criar_ou(conn, parent, nome, extras)
-                    print(f"    [NEW]  OU={nome},{parent}")
-
-                    # Só Direta tem os 4 subcontainers
-                    if ramo == RamoOU.DIRETA:
-                        for sub in SUBCONTAINERS_DIRETA:
-                            if not _existe(conn, dn_unidade, sub):
-                                _criar_container(conn, dn_unidade, sub)
-                                print(f"           └─ CN={sub}")
-
-                resultado["criadas"].append(f"{ramo.value}/{nome}")
-            except HTTPException as e:
-                print(f"    [ERR]  {nome}: {e.detail}")
-                resultado["erros"].append(f"{ramo.value}/{nome}: {e.detail}")
-            except Exception as e:
-                print(f"    [ERR]  {nome}: {e}")
-                resultado["erros"].append(f"{ramo.value}/{nome}: {e}")
-
-    return resultado
-
-
-# =============================================================================
-# Main
-# =============================================================================
-
-def main():
-    parser = argparse.ArgumentParser(description="Cria a árvore do PML com OUs")
-    parser.add_argument("--dry-run", action="store_true", help="Só mostra")
-    parser.add_argument("--so-esqueleto", action="store_true", help="Só Fase 1")
-    args = parser.parse_args()
-
-    print()
-    if args.dry_run:
-        print("╔" + "═" * 70 + "╗")
-        print("║  MODO DRY-RUN — nada será criado no AD                          ║")
-        print("╚" + "═" * 70 + "╝")
-    print(f"  AD_PML_BASE = {settings.AD_PML_BASE}")
-    print(f"  AD_SERVER   = {settings.AD_SERVER}\n")
-
-    conn = get_connection()
-    try:
-        print("=" * 72)
-        print("FASE 0 — Garantir OU=PML")
-        print("=" * 72)
-        garantir_pml(conn, dry_run=args.dry_run)   # ← NOVO
-
-        criados = garantir_esqueleto(conn, dry_run=args.dry_run)
-        resultado = {"criadas": [], "existentes": [], "erros": []}
-        if not args.so_esqueleto:
-            resultado = garantir_unidades(conn, dry_run=args.dry_run)
+            for ramo in RAMOS:
+                dn_ramo = f"OU={ramo},{dn_arvore}"
+                if dry_run:
+                    print(f"[DRY-RUN] criaria: {dn_ramo}")
+                else:
+                    _criar_container(conn, dn_ramo, ramo)
+                    print(f"OK  {dn_ramo}")
     finally:
         conn.unbind()
 
