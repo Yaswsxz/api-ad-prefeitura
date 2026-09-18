@@ -27,7 +27,7 @@ só tira o nó de Operativos e leva para Desincorporados (Inoperantes não
 é tocado).
 """
 
-from ldap3 import MODIFY_REPLACE, LEVEL
+from ldap3 import MODIFY_REPLACE
 from ldap3.core.exceptions import LDAPException
 from fastapi import HTTPException
 from datetime import datetime, timezone
@@ -43,24 +43,29 @@ SUBCONTAINERS_DIRETA = ["Estagio", "Carreira", "Comissionados", "NaoHumanos"]
 
 
 def _dn_ramo(arvore: str, ramo: RamoOU) -> str:
-    """DN do container do ramo (ex: CN=Direta,CN=Operativos,<PML_BASE>)."""
-    return f"CN={ramo.value},CN={arvore},{settings.AD_PML_BASE}"
+    """DN da OU do ramo (ex: OU=Direta,OU=Operativos,<PML_BASE>)."""
+    return f"OU={ramo.value},OU={arvore},{settings.AD_PML_BASE}"
 
 
 def _dn_unidade(arvore: str, ramo: RamoOU, nome: str) -> str:
-    """DN de uma unidade específica dentro de um ramo (ex: CN=FAZENDA,...)."""
-    return f"CN={nome},{_dn_ramo(arvore, ramo)}"
+    """DN de uma unidade específica dentro de um ramo (ex: OU=FAZENDA,...)."""
+    return f"OU={nome},{_dn_ramo(arvore, ramo)}"
 
 
-def _criar_container(conn, dn: str, nome_cn: str) -> None:
-    """Cria um container genérico (objectClass=container) no AD, se não existir."""
-    conn.search(search_base=dn.split(",", 1)[1], search_filter=f"(&(objectClass=container)(cn={nome_cn}))",
-                search_scope=LEVEL)
-    if conn.entries:
-        return  # já existe, não recria
-    ok = conn.add(dn, attributes={"objectClass": ["top", "container"], "cn": nome_cn})
-    if not ok:
-        raise HTTPException(status_code=500, detail=f"Falha ao criar container '{nome_cn}': {conn.result}")
+def _criar_container(conn, dn: str, nome_ou: str) -> None:
+    """
+    Cria uma Organizational Unit no AD. Idempotente: tenta criar direto
+    e, se o AD responder que já existe, trata como sucesso (em vez de
+    checar antes com um search — que pode ficar inconsistente com o
+    estado real por atraso de replicação ou resquício de tentativa
+    anterior, causando falso negativo e erro na hora de criar).
+    """
+    ok = conn.add(dn, attributes={"objectClass": ["top", "organizationalUnit"], "ou": nome_ou})
+    if ok:
+        return
+    if conn.result.get("description") == "entryAlreadyExists":
+        return
+    raise HTTPException(status_code=500, detail=f"Falha ao criar OU '{nome_ou}': {conn.result}")
 
 
 def _unidade_existe(conn, dn: str) -> bool:
@@ -105,30 +110,38 @@ def criar_ou(ramo: RamoOU, dados: OUCreate, ip_address: str = None, user_agent: 
 
     conn = get_connection()
     try:
-        if _unidade_existe(conn, dn_operativos):
-            raise HTTPException(status_code=409, detail=f"Já existe uma unidade '{dados.nome}' em Operativos/{ramo.value}")
+        unidade_ja_existe = _unidade_existe(conn, dn_operativos)
 
-        atributo_nome_orgao = _atributo_nome_orgao(conn)
-        if atributo_nome_orgao == "description":
-            logger.warning(
-                "Atributo 'pmlNomeOrgao' não existe no schema do AD — gravando o nome "
-                "descritivo em 'description' até o schema ser estendido."
-            )
+        if not unidade_ja_existe:
+            atributo_nome_orgao = _atributo_nome_orgao(conn)
+            if atributo_nome_orgao == "description":
+                logger.warning(
+                    "Atributo 'pmlNomeOrgao' não existe no schema do AD — gravando o nome "
+                    "descritivo em 'description' até o schema ser estendido."
+                )
 
-        atributos = {
-            "objectClass": ["top", "container"],
-            "cn": dados.nome,
-            atributo_nome_orgao: pml_nome_orgao,
-        }
+            atributos = {
+                "objectClass": ["top", "organizationalUnit"],
+                "ou": dados.nome,
+                atributo_nome_orgao: pml_nome_orgao,
+            }
 
-        for dn in (dn_operativos, dn_inoperantes):
-            ok = conn.add(dn, attributes=atributos)
-            if not ok:
-                raise HTTPException(status_code=500, detail=f"Falha ao criar unidade em '{dn}': {conn.result}")
+            for dn in (dn_operativos, dn_inoperantes):
+                ok = conn.add(dn, attributes=atributos)
+                if not ok:
+                    raise HTTPException(status_code=500, detail=f"Falha ao criar unidade em '{dn}': {conn.result}")
 
-            if ramo == RamoOU.DIRETA:
+        # Garante os 4 subcontainers da Direta mesmo quando a unidade já
+        # existia (conserta o caso de uma tentativa anterior ter criado a
+        # unidade sem eles, por exemplo por causa de um erro no meio do
+        # caminho) — _criar_container já é idempotente, não recria à toa.
+        if ramo == RamoOU.DIRETA:
+            for dn in (dn_operativos, dn_inoperantes):
                 for sub in SUBCONTAINERS_DIRETA:
-                    _criar_container(conn, f"CN={sub},{dn}", sub)
+                    _criar_container(conn, f"OU={sub},{dn}", sub)
+
+        if unidade_ja_existe:
+            raise HTTPException(status_code=409, detail=f"Já existe uma unidade '{dados.nome}' em Operativos/{ramo.value}")
 
         _registrar_atividade(
             operator=operator,
@@ -234,11 +247,11 @@ def mover_ou_desincorporar(ramo: RamoOU, nome: str, dados: OUMover, ip_address: 
         if not ok:
             raise HTTPException(status_code=500, detail=f"Falha ao gravar dados de desincorporação: {conn.result}")
 
-        conn.modify_dn(dn_atual, f"CN={nome}", new_superior=dn_destino_pai)
+        conn.modify_dn(dn_atual, f"OU={nome}", new_superior=dn_destino_pai)
         if conn.result["result"] != 0:
             raise HTTPException(status_code=500, detail=f"Falha ao mover unidade: {conn.result}")
 
-        dn_final = f"CN={nome},{dn_destino_pai}"
+        dn_final = f"OU={nome},{dn_destino_pai}"
 
         _registrar_atividade(
             operator=operator,
