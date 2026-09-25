@@ -42,9 +42,9 @@ def alterar_ou(ramo_path: str, nome: str, dados: OUUpdate, request: Request,
     )
 
 
-@router.patch("/{ramo_path}/{nome}/desincorporar", response_model=OUOut)
-def desincorporar_ou(ramo_path: str, nome: str, dados: OUMover, request: Request,
-                      current_user: str = Depends(get_current_user)):
+@router.patch("/{ramo_path}/{nome}/mover-para-desincorporados", response_model=OUOut, summary="Mover para Desincorporados")
+def mover_ou_para_desincorporados(ramo_path: str, nome: str, dados: OUMover, request: Request,
+                                   current_user: str = Depends(get_current_user)):
     """
     Move a unidade de Operativos para Desincorporados. Caso raro — usar só
     quando o órgão realmente deixou de existir (não é o mesmo que 'saiu
