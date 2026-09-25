@@ -1,4 +1,4 @@
-﻿"""
+﻿﻿"""
 Recria a árvore do PML no AD com os tipos corretos:
 
     OU=PML
@@ -306,7 +306,6 @@ def main():
         print(f"  Esqueleto: {criados} OUs criadas")
         print(f"  Unidades:  {len(resultado['criadas'])} criadas, "
               f"{len(resultado['existentes'])} já existiam, "
-
               f"{len(resultado['erros'])} erros")
         if resultado["erros"]:
             for e in resultado["erros"]:

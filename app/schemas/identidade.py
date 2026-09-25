@@ -23,7 +23,9 @@ class TipoPessoa(str, Enum):
 #   samAccountName não-humano = mínimo 5, nhu.(a-zA-Z){2,10}.(a-zA-Z){2,10}
 #   name não-humano           = mínimo 5, só minúsculas
 REGEX_LOGIN_HUMANO = re.compile(r"^[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
-REGEX_NOME_HUMANO = re.compile(r"^[A-Z][a-z]+\s[A-Z][a-z]+$")
+REGEX_NOME_HUMANO = re.compile(
+    r"^[A-Z][a-z]+(\s(?:[A-Z][a-z]+|de|da|do|das|dos|e))*\s[A-Z][a-z]+$"
+)
 REGEX_LOGIN_NAO_HUMANO = re.compile(r"^nhu\.[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
 REGEX_NOME_NAO_HUMANO = re.compile(r"^[a-z]{5,}$")
 
@@ -70,8 +72,7 @@ class PessoaCreate(BaseModel):
     def nome_capitalizado(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        v = v.strip().capitalize()
-        return v
+        return v.strip().title()   # ← troca capitalize por title
 
     def validar_por_tipo(self) -> None:
         """
