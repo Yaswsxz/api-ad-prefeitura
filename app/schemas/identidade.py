@@ -1,4 +1,5 @@
 ﻿import re
+import unicodedata
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -23,7 +24,11 @@ class TipoPessoa(str, Enum):
 #   samAccountName não-humano = mínimo 5, nhu.(a-zA-Z){2,10}.(a-zA-Z){2,10}
 #   name não-humano           = mínimo 5, só minúsculas
 REGEX_LOGIN_HUMANO = re.compile(r"^[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
-REGEX_NOME_HUMANO = re.compile(r"^[A-Z][a-z]+\s[A-Z][a-z]+$")
+# Letras maiúsculas/minúsculas com acento (Latin-1: À-Ö, Ø-Þ / ß-ö, ø-ÿ),
+# pra aceitar nomes como José, João, André, Conceição, Émerson.
+_MAIUSC = "A-ZÀ-ÖØ-Þ"
+_MINUSC = "a-zß-öø-ÿ"
+REGEX_NOME_HUMANO = re.compile(rf"^[{_MAIUSC}][{_MINUSC}]+\s[{_MAIUSC}][{_MINUSC}]+$")
 REGEX_LOGIN_NAO_HUMANO = re.compile(r"^nhu\.[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
 REGEX_NOME_NAO_HUMANO = re.compile(r"^[a-z]{5,}$")
 
@@ -70,7 +75,9 @@ class PessoaCreate(BaseModel):
     def nome_capitalizado(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        v = v.strip().capitalize()
+        # NFC garante que "é" chegue como 1 caractere só (e não "e" + acento
+        # solto, como alguns clientes/teclados enviam), senão a regex recusa.
+        v = unicodedata.normalize("NFC", v.strip()).capitalize()
         return v
 
     def validar_por_tipo(self) -> None:
@@ -128,19 +135,3 @@ class PessoaOut(BaseModel):
 
 class PessoaCriadaOut(PessoaOut):
     senha_gerada: Optional[str] = None  # None para NaoHumanos
-
-
-
-class PessoaMover(BaseModel):
-    """Payload para mover uma pessoa entre ramos ou para outro DN."""
-    destino: str = Field(
-        ...,
-        description=(
-            "Destino do movimento. Pode ser:\n"
-            "  - 'OPERATIVOS' ou 'INOPERANTES' → espelha o caminho (troca só o ramo, "
-            "mantendo CN=Carreira, CN=FAZENDA, CN=DIRETA etc.)\n"
-            "  - Um DN completo do novo pai (ex: 'CN=EDUCACAO,CN=DIRETA,CN=OPERATIVOS,OU=PML,...')\n"
-            "    → move diretamente para esse pai (usado p/ trocar de setor)."
-        ),
-        example="INOPERANTES",
-    )
