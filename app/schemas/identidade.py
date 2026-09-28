@@ -31,8 +31,8 @@ _MINUSC = "a-z\u00df-\u00f6\u00f8-\u00ff"
 REGEX_NOME_HUMANO = re.compile(
     rf"^[{_MAIUSC}][{_MINUSC}]+(\s(?:[{_MAIUSC}][{_MINUSC}]+|de|da|do|das|dos|e))*\s[{_MAIUSC}][{_MINUSC}]+$"
 )
-REGEX_LOGIN_NAO_HUMANO = re.compile(r"^nhu\.[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
-REGEX_NOME_NAO_HUMANO = re.compile(r"^[a-z]{5,}$")
+REGEX_LOGIN_NAO_HUMANO = re.compile(r"^nhu\.[a-zA-Z0-9]{2,10}\.[a-zA-Z0-9]{2,10}$")
+REGEX_NOME_NAO_HUMANO = re.compile(r"^[a-z0-9]{5,}$")
 
 
 class PessoaCreate(BaseModel):
@@ -95,7 +95,7 @@ class PessoaCreate(BaseModel):
             if not REGEX_NOME_NAO_HUMANO.match(nome_gerado) or len(nome_gerado) < 5:
                 raise ValueError(
                     "Nome resultante do não-humano deve ter no mínimo 5 caracteres "
-                    "e conter apenas letras minúsculas"
+                    "e conter apenas letras minúsculas e números"
                 )
         else:
             if not self.primeiro_nome or not self.ultimo_nome:
