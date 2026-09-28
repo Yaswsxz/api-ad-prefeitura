@@ -1,4 +1,5 @@
 ﻿import re
+import unicodedata
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -23,8 +24,12 @@ class TipoPessoa(str, Enum):
 #   samAccountName não-humano = mínimo 5, nhu.(a-zA-Z){2,10}.(a-zA-Z){2,10}
 #   name não-humano           = mínimo 5, só minúsculas
 REGEX_LOGIN_HUMANO = re.compile(r"^[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
+# Letras com acento (Latin-1) pra aceitar Jose, Joao, Andre, Conceicao etc.
+# Escrito com \u para nao depender da codificacao do arquivo.
+_MAIUSC = "A-Z\u00c0-\u00d6\u00d8-\u00de"
+_MINUSC = "a-z\u00df-\u00f6\u00f8-\u00ff"
 REGEX_NOME_HUMANO = re.compile(
-    r"^[A-Z][a-z]+(\s(?:[A-Z][a-z]+|de|da|do|das|dos|e))*\s[A-Z][a-z]+$"
+    rf"^[{_MAIUSC}][{_MINUSC}]+(\s(?:[{_MAIUSC}][{_MINUSC}]+|de|da|do|das|dos|e))*\s[{_MAIUSC}][{_MINUSC}]+$"
 )
 REGEX_LOGIN_NAO_HUMANO = re.compile(r"^nhu\.[a-zA-Z]{2,10}\.[a-zA-Z]{2,10}$")
 REGEX_NOME_NAO_HUMANO = re.compile(r"^[a-z]{5,}$")
@@ -72,7 +77,8 @@ class PessoaCreate(BaseModel):
     def nome_capitalizado(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        return v.strip().title()   # ← troca capitalize por title
+        # NFC: "e" + acento solto vira 1 caractere so (senao a regex recusa)
+        return unicodedata.normalize("NFC", v.strip()).title()
 
     def validar_por_tipo(self) -> None:
         """
