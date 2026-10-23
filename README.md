@@ -188,7 +188,7 @@ Copie `.env.example` para `.env` e preencha (o arquivo nunca é versionado). A l
 
 | Chave | Para que serve |
 |---|---|
-| `JWT_SECRET_KEY`, `API_CLIENT_ID`, `API_CLIENT_SECRET_HASH` | **Obrigatórias**: a API não sobe sem elas. O `.env.example` mostra como gerar o hash do segredo do cliente |
+| `JWT_SECRET_KEY`, `API_CLIENT_ID`, `API_CLIENT_SECRET_HASH` | **Obrigatórias**: a API não sobe sem elas. `docker compose run --rm gerar-segredos` (ou `python -m app.core.segredo`) gera o segredo do cliente, o hash e o `JWT_SECRET_KEY` ([Primeira instalação](#primeira-instalação)) |
 | `AD_SERVER`, `AD_BIND_USER`, `AD_BIND_PASSWORD`, `AD_UPN_SUFIXO` | Conexão e conta de serviço da API no AD (segredos só no `.env`) |
 | `AD_PML_BASE` | Raiz da sub-árvore da API; tem de estar dentro de `OU=DESENVOL,DC=londrina,DC=pr,DC=gov,DC=br`, senão a API não sobe |
 | `AD_TLS_LEGADO`, `AD_TLS_CERT_FIXADO`, `AD_TLS_CA_FILE` | TLS: `ldaps://`, TLS 1.0 do DC atual e certificado fixado (`config/tls/cegonha.pem`) |
@@ -212,10 +212,47 @@ python -m pytest -m integration              # opt-in: handshake TLS real com o 
 A imagem é `python:3.12-slim` (Debian, não alpine: as dependências de criptografia têm *wheels* para ela e instalam sem
 compilador) com o código dentro; **configuração, logs e `.env` ficam no host**.
 
+#### Primeira instalação
+
 ```bash
-cp .env.example .env                    # preencha; o arquivo nunca vai para a imagem nem para o Git
+cp .env.example .env                              # 1. o arquivo nunca vai para a imagem nem para o Git
+docker compose run --rm gerar-segredos            # 2. imprime o segredo do cliente, o hash e o JWT_SECRET_KEY
+```
+
+O passo 2 usa a própria imagem da API (a primeira execução a constrói; numa instalação já existente que recebeu código novo,
+rode antes `docker compose build`, senão o comando usa a imagem antiga e não imprime nada), **sem rede e sem ler o `.env`**, e
+remove o container ao sair. A saída tem esta forma:
+
+```
+SEGREDO DO CLIENTE (entregue ao cliente; não é mostrado de novo):
+  <segredo aleatório>
+
+Cole no .env:
+  API_CLIENT_SECRET_HASH='pbkdf2_sha256$600000$...$...'
+  JWT_SECRET_KEY=<chave aleatória>
+```
+
+3. **Cole as duas linhas** `API_CLIENT_SECRET_HASH` e `JWT_SECRET_KEY` no `.env` (o hash fica entre aspas simples, porque contém `$`)
+   e defina `API_CLIENT_ID` (o nome do cliente, livre).
+4. **Entregue o segredo em claro ao cliente agora** (o front-end o envia com o `client_id` em `POST /auth/token`). Ele só existe no
+   terminal: não é gravado em arquivo nem em log, e o `.env` guarda apenas o hash. Se for perdido, gere outro (passo 2) e troque o hash.
+5. Preencha o restante do `.env` (`AD_*`, `AD_PML_BASE`, TLS do DC; ver "Configuração") e coloque `fullchain.crt` e `fullchain.key`
+   em `./.certs` (ver "HTTPS e certificados").
+6. Suba a pilha e confira:
+
+```bash
 mkdir -p logs && chown "$(id -u):$(id -g)" logs   # a pasta de logs precisa ser gravável pelo API_UID/API_GID
-docker compose up -d --build            # https://<NGINX_SERVER_NAME>/docs (HTTPS pelo nginx; os arquivos da Infra em ./.certs; veja "HTTPS e certificados")
+docker compose up -d --build            # https://<NGINX_SERVER_NAME>/docs (HTTPS pelo nginx)
+curl https://<NGINX_SERVER_NAME>/health # {"status":"ok"}
+```
+
+**Trocar o segredo do cliente** (rotação): rode `docker compose run --rm gerar-segredos` de novo, troque `API_CLIENT_SECRET_HASH`
+no `.env` (e o `JWT_SECRET_KEY`, se quiser invalidar os tokens emitidos), reinicie com `docker compose restart api` e entregue o
+novo segredo ao cliente; o anterior deixa de valer. Fora de container, o mesmo comando é `python -m app.core.segredo` (com o venv ativo).
+
+#### Dia a dia
+
+```bash
 docker compose logs -f api              # cópia do console; os arquivos completos estão em logs/
 docker compose down                     # para (logs/ e auditoria permanecem no host)
 docker compose run --rm testes          # pytest dentro da imagem (AD em memória)
@@ -331,8 +368,6 @@ os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha no
 - **Canal com o DC fraco** — TLS 1.0, RSA 1024, SHA-1; limitação aceita. O certificado fixado vence em
   **20/09/2027**: ao renovar, substituir `config/tls/cegonha.pem`.
 - **Atributos `pml*` ainda não existem no schema** — ver "Dados e auditoria".
-- **`scripts/criar_estrutura_ad.py` é legado**: cria a árvore anterior à separação entre Humanos e NaoHumanos e não deve ser usado; a API cria sozinha os
-  nós fixos. Reescrevê-lo ou removê-lo é decisão pendente. `scripts/listar_ous.py` (só leitura da `AD_PML_BASE`) continua válido.
 - **Limite de login em memória**: o limite de falhas em `/auth/token` vale por processo.
 - **Rotação de logs para um processo**: com vários workers do uvicorn seria preciso um rotador externo.
 
@@ -351,7 +386,7 @@ os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha no
 | API não reflete mudança / "Failed to fetch" | processo antigo do uvicorn ainda rodando; encerre-o e suba de novo |
 | Container: `permission denied` em `/app/logs` | a pasta `logs/` do host não é gravável por `API_UID:API_GID` (veja `id -u` e `chown`) |
 | Container não sobe ou `.env` virou pasta | o `.env` (ou o arquivo de `API_ENV_FILE`) tem de existir **antes** do `up` (`cp .env.example .env`); no Docker, montar um arquivo inexistente cria uma pasta com esse nome |
-| Aviso do Compose `variable "..." is not set` | o `.env` tem um `$` (hash do segredo); é só o Compose lendo o arquivo para interpolar e não afeta a API, que lê o arquivo sozinha. Entre aspas simples o aviso some |
+| Aviso do Compose `variable "..." is not set` | o `.env` tem um `$` (hash do segredo); é só o Compose lendo o arquivo para interpolar e não afeta a API, que lê o arquivo sozinha. O hash gerado por `gerar-segredos` já sai entre aspas simples, e então o aviso não aparece; se colou sem aspas, ponha-as |
 | Container: porta em uso | outro processo já usa 443/80; pare-o ou mude `HTTPS_PORT`/`HTTP_PORT` (e `REDIRECT_PORT`) |
 | nginx não sobe (`cannot load certificate`) | falta ou está inválido `.certs/fullchain.crt`/`.certs/fullchain.key` (peça o PEM à Infraestrutura) |
 | `curl: (60)` ou `unable to get local issuer certificate` | o cliente não confia na CA, ou o `fullchain.crt` só tem o certificado do servidor, sem o intermediário da CA: peça à Infraestrutura o arquivo com a cadeia completa. Para testar assim mesmo sem desligar a verificação, aponte `--cacert` (ou `ACEITACAO_CACERT`) para o próprio `fullchain.crt` |

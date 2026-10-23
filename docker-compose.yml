@@ -1,6 +1,7 @@
 # API de Identidades no Active Directory (PML) — execução em container com HTTPS.
 #
 #   cp .env.example .env     # e preencha (o arquivo nunca vai para a imagem nem para o Git)
+#   docker compose run --rm gerar-segredos   # imprime o segredo do cliente, o hash e o JWT_SECRET_KEY: cole no .env
 #   # coloque fullchain.crt e fullchain.key (da CA, pela Infraestrutura) em ./.certs
 #   docker compose up -d --build          # com Podman: podman compose up -d --build  (podman machine start antes, no Windows)
 #   docker compose logs -f nginx api
@@ -116,6 +117,23 @@ services:
       options:
         max-size: 10m
         max-file: "5"
+
+  # Gera as credenciais de uma instalação (segredo do cliente, seu hash e JWT_SECRET_KEY) e as imprime no terminal:
+  #   docker compose run --rm gerar-segredos
+  # Sem rede e sem volumes: não lê o .env (roda antes de ele existir) e não grava nada; o container é removido ao sair.
+  gerar-segredos:
+    profiles:
+      - ferramentas
+    build: .
+    image: pml-api-active-directory:${API_IMAGE_TAG:-local}
+    user: "${API_UID:-1000}:${API_GID:-1000}"
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["python", "-m", "app.core.segredo"]
 
   # Testes dentro da imagem, sem subir a API:
   #   docker compose run --rm testes

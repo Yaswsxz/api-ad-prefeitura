@@ -3,12 +3,13 @@ Configuração, arquivo de regras, segredo/senha e a API protegida por token.
 Nenhuma rota usada aqui chega ao AD.
 """
 import pytest
+from dotenv import dotenv_values
 from fastapi.testclient import TestClient
 from jose import jwt
 from pydantic import ValidationError
 
 import app.main as principal
-from app.core import ldap_connection, regras as regras_mod
+from app.core import ldap_connection, regras as regras_mod, segredo as segredo_mod
 from app.core.auth import verificar_segredo
 from app.core.config import PLACEHOLDER_JWT, Settings, settings
 from app.core.erros_ad import ErroConfiguracao
@@ -92,6 +93,35 @@ def test_hash_do_segredo_ida_e_volta():
     assert verificar_segredo("outro-segredo", h)
     assert not verificar_segredo("errado", h)
     assert not verificar_segredo("x", "formato-invalido")
+
+
+def _credenciais_impressas(capsys) -> tuple[str, str, str]:
+    """Roda segredo.main() e devolve (segredo, linha do hash, linha da chave JWT) como impressas."""
+    segredo_mod.main()
+    linhas = capsys.readouterr().out.splitlines()
+    segredo = linhas[linhas.index("SEGREDO DO CLIENTE (entregue ao cliente; não é mostrado de novo):") + 1].strip()
+    return (
+        segredo,
+        next(l.strip() for l in linhas if l.strip().startswith("API_CLIENT_SECRET_HASH=")),
+        next(l.strip() for l in linhas if l.strip().startswith("JWT_SECRET_KEY=")),
+    )
+
+
+def test_comando_de_gerar_segredos_imprime_credenciais_validas(capsys, tmp_path):
+    segredo, linha_hash, linha_jwt = _credenciais_impressas(capsys)
+
+    # as duas linhas são coladas no .env: lidas como o pydantic-settings as lê, voltam exatas e passam nos validadores
+    env = tmp_path / ".env"
+    env.write_text(f"{linha_hash}\n{linha_jwt}\n", encoding="utf-8")
+    lidos = dotenv_values(env)
+    assert lidos["API_CLIENT_SECRET_HASH"].startswith("pbkdf2_sha256$")
+    assert verificar_segredo(segredo, lidos["API_CLIENT_SECRET_HASH"])
+    assert len(lidos["JWT_SECRET_KEY"]) >= 32
+    config(JWT_SECRET_KEY=lidos["JWT_SECRET_KEY"], API_CLIENT_SECRET_HASH=lidos["API_CLIENT_SECRET_HASH"])
+
+
+def test_comando_de_gerar_segredos_gera_valores_novos_a_cada_vez(capsys):
+    assert _credenciais_impressas(capsys) != _credenciais_impressas(capsys)
 
 
 def test_senha_gerada_atende_a_complexidade_do_ad():

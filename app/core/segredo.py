@@ -20,6 +20,27 @@ def gerar_hash_segredo(segredo: str, iteracoes: int = _ITERACOES) -> str:
     return f"pbkdf2_sha256${iteracoes}${salt.hex()}${derivado.hex()}"
 
 
+def gerar_credenciais() -> tuple[str, str, str]:
+    """(segredo do cliente, valor de API_CLIENT_SECRET_HASH, valor de JWT_SECRET_KEY), todos novos."""
+    segredo = secrets.token_urlsafe(32)
+    return segredo, gerar_hash_segredo(segredo), secrets.token_urlsafe(48)
+
+
+def main() -> None:
+    """
+    `python -m app.core.segredo` (no Compose: `docker compose run --rm gerar-segredos`): imprime as credenciais
+    de uma instalação. Só vai ao terminal: nada é gravado em arquivo nem em log, e o segredo em claro não é
+    mostrado de novo. O hash sai entre aspas simples para o "$" não ser interpolado (Compose, shell).
+    """
+    segredo, hash_segredo, chave_jwt = gerar_credenciais()
+    print("SEGREDO DO CLIENTE (entregue ao cliente; não é mostrado de novo):")
+    print(f"  {segredo}")
+    print()
+    print("Cole no .env:")
+    print(f"  API_CLIENT_SECRET_HASH='{hash_segredo}'")
+    print(f"  JWT_SECRET_KEY={chave_jwt}")
+
+
 def verificar_segredo(segredo: str, hash_armazenado: str) -> bool:
     """Compara o segredo informado com o hash configurado, em tempo constante."""
     try:
@@ -30,3 +51,7 @@ def verificar_segredo(segredo: str, hash_armazenado: str) -> bool:
         return hmac.compare_digest(derivado.hex(), esperado_hex)
     except (ValueError, TypeError):
         return False
+
+
+if __name__ == "__main__":
+    main()
