@@ -1,5 +1,5 @@
 """
-Valida, sem AD, a massa da campanha de aceitação (testes_aceitacao/massa/*.tsv) contra as regras
+Valida, sem AD, a massa da campanha de aceitação (tests/aceitacao/massa/*.tsv) contra as regras
 reais da API: se a massa é inválida, a campanha falharia no AD por erro nosso, não da API.
 """
 import csv
@@ -14,7 +14,7 @@ from app.core.regras import regras
 from app.schemas.estrutura import OUCreate
 from app.schemas.identidade import HumanoCreate, NaoHumanoCreate
 
-MASSA = Path(__file__).resolve().parents[1] / "testes_aceitacao" / "massa"
+MASSA = Path(__file__).resolve().parent / "aceitacao" / "massa"
 
 
 def ler(arquivo: str) -> list[dict]:

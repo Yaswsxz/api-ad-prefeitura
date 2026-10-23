@@ -151,7 +151,6 @@ services:
       - ${API_ENV_FILE:-./.env}:/app/.env:ro
       - ./tests:/app/tests:ro
       - ./pytest.ini:/app/pytest.ini:ro
-      - ./testes_aceitacao/massa:/app/testes_aceitacao/massa:ro   # tests/test_massa_aceitacao.py lê a massa
       - ${API_CONFIG_DIR:-./config}:/app/config:ro
       - ${API_LOGS_DIR:-./logs}:/app/logs
     command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]

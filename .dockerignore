@@ -21,8 +21,6 @@ logs
 # Não são necessários para executar
 docs
 tests
-testes_aceitacao
-scripts
 README.md
 docker-compose.yml
 Dockerfile

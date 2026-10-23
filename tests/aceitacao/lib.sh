@@ -7,7 +7,7 @@ set -u
 set +x
 
 ACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ACE_RAIZ="$(dirname "$ACE_DIR")"
+ACE_RAIZ="$(cd "$ACE_DIR/../.." && pwd)"
 ACE_MASSA="$ACE_DIR/massa"
 ACE_SAIDA="$ACE_RAIZ/docs/testes/execucoes"
 ACE_LOGS="$ACE_RAIZ/logs"

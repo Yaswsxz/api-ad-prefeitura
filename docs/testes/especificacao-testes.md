@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Escopo** | Todas as rotas da API, executadas com `cURL` contra a API por HTTPS (via nginx), que fala com o AD de desenvolvimento (`OU=PML,OU=DESENVOL`) |
-| **Executor** | `testes_aceitacao/*.sh` (bash + `curl` + `jq`); a massa está em `testes_aceitacao/massa/*.tsv` |
+| **Executor** | `tests/aceitacao/*.sh` (bash + `curl` + `jq`); a massa está em `tests/aceitacao/massa/*.tsv` |
 | **Supervisão** | Fase a fase: cada fase só roda com autorização do responsável; se um teste falha, a fase para |
 | **Resultado** | `docs/testes/resultados-AAAA-MM-DD.md` (gerado) e `docs/testes/execucoes/*.tsv` |
 
@@ -42,7 +42,7 @@ chave for `true`, os mesmos testes passam a exigir os atributos gravados (variá
 
 ## 4. Massa
 
-Fonte única: `testes_aceitacao/massa/unidades.tsv` (10 unidades) e `identidades.tsv` (72 contas). Validada offline
+Fonte única: `tests/aceitacao/massa/unidades.tsv` (10 unidades) e `identidades.tsv` (72 contas). Validada offline
 por `tests/test_massa_aceitacao.py` contra os schemas da API.
 
 | Ramo | Unidades (código para os não humanos) |

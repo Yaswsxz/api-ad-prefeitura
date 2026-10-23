@@ -14,17 +14,17 @@ O responsável limpa o conteúdo antigo das três árvores sob `OU=PML` e reinic
 ## Como rodar (uma fase por vez, com aval do responsável)
 O shell padrão do WSL é o `fish`; rode sempre com `bash`:
 
-    wsl.exe bash testes_aceitacao/f0_prevoo.sh      # leitura; confere que nomes e logins estão livres
-    wsl.exe bash testes_aceitacao/f1_unidades.sh    # cria 10 unidades
-    wsl.exe bash testes_aceitacao/f2_identidades.sh # cria 72 contas (bloqueadas, em Inoperantes)
-    wsl.exe bash testes_aceitacao/f3_ativar.sh      # ativa as 72 (define senha: exige TLS)
-    wsl.exe bash testes_aceitacao/f4_ciclo.sh       # ida e volta; NÃO reexecutável às cegas
-    wsl.exe bash testes_aceitacao/f5_desincorporar.sh # NÃO reexecutável às cegas
-    wsl.exe bash testes_aceitacao/f6_contrato.sh
-    wsl.exe bash testes_aceitacao/f7_auditoria.sh   # conciliação com a auditoria
-    wsl.exe bash testes_aceitacao/f8_arvore_final.sh
-    wsl.exe bash testes_aceitacao/f9_senha.sh       # NÃO reexecutável às cegas; depois, reexecute F7 e F8
-    wsl.exe bash testes_aceitacao/relatorio.sh
+    wsl.exe bash tests/aceitacao/f0_prevoo.sh      # leitura; confere que nomes e logins estão livres
+    wsl.exe bash tests/aceitacao/f1_unidades.sh    # cria 10 unidades
+    wsl.exe bash tests/aceitacao/f2_identidades.sh # cria 72 contas (bloqueadas, em Inoperantes)
+    wsl.exe bash tests/aceitacao/f3_ativar.sh      # ativa as 72 (define senha: exige TLS)
+    wsl.exe bash tests/aceitacao/f4_ciclo.sh       # ida e volta; NÃO reexecutável às cegas
+    wsl.exe bash tests/aceitacao/f5_desincorporar.sh # NÃO reexecutável às cegas
+    wsl.exe bash tests/aceitacao/f6_contrato.sh
+    wsl.exe bash tests/aceitacao/f7_auditoria.sh   # conciliação com a auditoria
+    wsl.exe bash tests/aceitacao/f8_arvore_final.sh
+    wsl.exe bash tests/aceitacao/f9_senha.sh       # NÃO reexecutável às cegas; depois, reexecute F7 e F8
+    wsl.exe bash tests/aceitacao/relatorio.sh
 
 Variáveis: `ACEITACAO_RETOMADA=1` (F0 aceita objetos já existentes), `ACEITACAO_NOVA_MARCA=1` (refaz a marca de
 início), `ACEITACAO_PML_GRAVAR` (padrão: o valor de `PML_GRAVAR` do `.env`), `ACEITACAO_DATA` (data dos arquivos).

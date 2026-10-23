@@ -3,7 +3,7 @@
 # Para cada ID vale a ÚLTIMA execução (uma fase repetida substitui a anterior).
 set -u
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RAIZ="$(dirname "$AQUI")"
+RAIZ="$(cd "$AQUI/../.." && pwd)"
 SAIDA="$RAIZ/docs/testes/execucoes"
 DATA="${ACEITACAO_DATA:-$(date +%F)}"
 MD="$RAIZ/docs/testes/resultados-$DATA.md"

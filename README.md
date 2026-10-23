@@ -117,7 +117,8 @@ flowchart TB
 | `app/core/` | `arvore` (único lugar com os nomes das OUs fixas e a montagem/leitura de DNs), `raiz` (contenção), `ldap_connection`, `erros_ad`, `tls`, `atributos`, `regras`, `config`, `auth`, `limite`, `rotacao`, `logging_config` |
 | `app/audit_service.py`, `app/database.py` | Auditoria em duas fases e modelos do SQLite |
 | `config/` | `regras.toml` (atributos alteráveis e tipos de não humano) e `tls/` (certificado público fixado do DC) |
-| `tests/`, `testes_aceitacao/` | Testes com dublês (sem AD) e campanha de aceitação contra o AD de desenvolvimento |
+| `tests/` | Testes com dublês (`pytest`; AD em memória, nenhum acesso ao AD) |
+| `tests/aceitacao/` | Campanha de aceitação por `curl` contra a API e o AD de desenvolvimento: fases `f0`…`f9`, massa em `massa/*.tsv` e `README.md` |
 | `docs/` | Diagrama da árvore, especificação e relatórios dos testes de aceitação e a especificação legada |
 
 ### A árvore do AD
@@ -350,10 +351,10 @@ Senhas nunca são auditadas nem registradas em log. O CPF é um campo comum e po
 
 ### Campanha de aceitação (AD real)
 
-`testes_aceitacao/` executa, com `curl`, todas as rotas contra a API por HTTPS (nginx; destino pelo `.env`, ver `testes_aceitacao/README.md`), que fala com o AD de desenvolvimento
+`tests/aceitacao/` executa, com `curl`, todas as rotas contra a API por HTTPS (nginx; destino pelo `.env`, ver `tests/aceitacao/README.md`), que fala com o AD de desenvolvimento
 (10 unidades e 72 contas, mantidas ao final). Cada fase (F0 a F9) roda **só com autorização do responsável**; a especificação e
 os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha nova, o conteúdo antigo das três árvores sob
-`OU=PML` precisa estar limpo. Detalhes em [`testes_aceitacao/README.md`](testes_aceitacao/README.md).
+`OU=PML` precisa estar limpo. Detalhes em [`tests/aceitacao/README.md`](tests/aceitacao/README.md).
 
 ### Documentos do projeto
 
