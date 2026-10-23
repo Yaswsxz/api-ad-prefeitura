@@ -215,7 +215,7 @@ compilador) com o código dentro; **configuração, logs e `.env` ficam no host*
 ```bash
 cp .env.example .env                    # preencha; o arquivo nunca vai para a imagem nem para o Git
 mkdir -p logs && chown "$(id -u):$(id -g)" logs   # a pasta de logs precisa ser gravável pelo API_UID/API_GID
-docker compose up -d --build            # http://127.0.0.1:8000/docs
+docker compose up -d --build            # https://<NGINX_SERVER_NAME>/docs (HTTPS pelo nginx; os arquivos da Infra em ./.certs; veja "HTTPS e certificados")
 docker compose logs -f api              # cópia do console; os arquivos completos estão em logs/
 docker compose down                     # para (logs/ e auditoria permanecem no host)
 docker compose run --rm testes          # pytest dentro da imagem (AD em memória)
@@ -226,6 +226,9 @@ docker compose run --rm testes          # pytest dentro da imagem (AD em memóri
 | Configuração | `./config` (`API_CONFIG_DIR`) | `/app/config` (somente leitura) | `regras.toml` e o certificado fixado do DC (`tls/cegonha.pem`) |
 | Logs e auditoria | `./logs` (`API_LOGS_DIR`) | `/app/logs` | `api_ad*.log`, `uvicorn.log`, `ad_audit.db`, contingência; política de quebra sem apagar |
 | Ambiente | `.env` (`API_ENV_FILE`) | `/app/.env` (somente leitura) | lido pela própria API, como fora do container; o Compose não o injeta (interpolaria o `$` do hash do segredo e o corromperia) |
+| Certificados HTTPS | `./.certs` (`API_CERTS_DIR`) | `/etc/nginx/certs` do nginx (somente leitura) | `fullchain.crt` e `fullchain.key`, fornecidos pela CA; nunca vão ao Git nem à imagem |
+| Configuração do nginx | `./config/nginx` (`NGINX_CONF_DIR`) | `/etc/nginx/templates` do nginx (somente leitura) | `default.conf.template`, com as variáveis do Compose |
+| Logs do nginx | `./logs/nginx` | `/var/log/nginx` do nginx | `acesso-AAAA-MM-DD.log` (um por dia) e `error.log`; nada é apagado |
 
 **Podman** (alternativa ao Docker, sem daemon próprio): os mesmos arquivos servem. No Windows, inicie a máquina uma vez
 (`podman machine start`) e use `podman compose up -d --build` no lugar de `docker compose ...` (o `podman compose` delega
@@ -233,19 +236,21 @@ ao `docker-compose` instalado). A base é referenciada por nome completo (`docke
 aviso de *short-name* do Podman. Em Podman **rootless** o uid do container não é o do host: use `API_UID=0` (o root do
 container é o seu usuário) ou `userns_mode: "keep-id"`; na máquina **rootful** do Windows e no Docker o padrão `1000` funciona.
 
-Variáveis do Compose (todas opcionais; lista comentada no fim do `.env.example`): `API_BIND` e `API_PORT` (a porta só é publicada
-em `127.0.0.1` por padrão; o HTTPS é do proxy reverso), `API_UID`/`API_GID` (dono dos arquivos de log), `API_ENV_FILE`,
-`API_CONFIG_DIR`, `API_LOGS_DIR`, `API_IMAGE_TAG`, `TZ` (o log vira por dia local) e `FORWARDED_ALLOW_IPS`. Exemplos:
+Variáveis do Compose (todas opcionais, com os padrões de produção; lista comentada no fim do `.env.example`): `HTTPS_BIND`,
+`HTTPS_PORT` e `HTTP_PORT` (onde o nginx é publicado; padrão `0.0.0.0:443` e `:80`), `API_CERTS_DIR`, `NGINX_SERVER_NAME`,
+`HSTS_MAX_AGE`, `API_UID`/`API_GID` (dono dos arquivos de log), `API_ENV_FILE`, `API_CONFIG_DIR`, `API_LOGS_DIR`,
+`API_IMAGE_TAG` e `TZ` (o log vira por dia local). Exemplos:
 
 ```bash
 API_ENV_FILE=prod.env API_LOGS_DIR=/var/log/pml-api docker compose up -d     # outro .env e outra pasta de logs
-API_BIND=0.0.0.0 API_PORT=8080 docker compose up -d                           # abrir à rede (atrás de um proxy)
+HTTPS_BIND=127.0.0.1 HTTPS_PORT=8443 HTTP_PORT=8080 REDIRECT_PORT=:8443 docker compose up -d   # desenvolvimento, portas altas e só local
 ```
 
 Pontos de atenção:
 - No container, deixe `LOG_DIR`, `API_LOG_FILE`, `DATABASE_URL` e `AUDITORIA_CONTINGENCIA_FILE` **vazios** no `.env` (caminhos do host não valem lá dentro).
-- **IP do cliente** (auditoria e limite de login): com o mapeamento de porta do Docker, o `uvicorn` vê o IP do gateway da rede do
-  Docker. Com um proxy reverso no host, ajuste `FORWARDED_ALLOW_IPS` para o IP que o container enxerga (e só com a API em loopback).
+- **IP do cliente** (auditoria e limite de login): o nginx é a borda e **sobrescreve** o `X-Forwarded-For` com o IP real; como só
+  ele alcança a API, o `uvicorn` confia no cabeçalho (`FORWARDED_ALLOW_IPS=*`). Se um balanceador for posto na frente do nginx, o
+  IP visto será o do balanceador, a menos que ele seja configurado para repassar o IP (`real_ip` no nginx).
 - **SQLite** em volume exige disco local (ext4/WSL2); em NFS/SMB o bloqueio de arquivo não é confiável.
 - **Um container, um processo**: a rotação de logs vale para um único `uvicorn`; não use `--workers` nem réplicas.
 - O `json-file` do Docker limita só a cópia do console (`max-size`); os arquivos de `logs/` não são apagados.
@@ -253,6 +258,23 @@ Pontos de atenção:
   `docker compose run --rm testes python -m pytest -m integration tests/test_tls_dc.py`. Se um dia falhar (imagem base nova com
   política mais estrita), descomente `OPENSSL_CONF` no `docker-compose.yml`
   (usa o `config/openssl-legado.cnf`, com `MinProtocol = TLSv1` e `CipherString = ALL:@SECLEVEL=0`); vale só para o serviço da API, restrita ao canal com o AD.
+
+### HTTPS (nginx) e certificados
+
+Só o **nginx** é publicado no host. Ele termina o TLS (1.2 e 1.3, cifras do perfil "intermediário" da Mozilla, sem *tickets* de
+sessão), redireciona o HTTP para o HTTPS e repassa à API pela rede interna do Compose; **a API não tem porta publicada**. Imagem:
+`nginxinc/nginx-unprivileged` (oficial, roda sem root). Cabeçalhos de segurança (HSTS por variável, `nosniff`, `no-referrer`) e
+`X-Request-ID` (o mesmo valor nos logs do nginx e da API). A configuração está em `config/nginx/default.conf.template`.
+
+**Certificados.** O nginx lê `fullchain.crt` (certificado do servidor + intermediários, nesta ordem) e `fullchain.key` (chave sem
+senha) de `./.certs`. Em produção os arquivos vêm da CA, pela Infraestrutura. O `.certs/` está no `.gitignore` e no `.dockerignore`:
+**chaves nunca vão ao Git nem à imagem**.
+
+**Atualizar o certificado** (sem recarga automática, por escolha): copie os novos `fullchain.crt` e `fullchain.key` para `./.certs`
+e reinicie o nginx (`docker compose restart nginx`) ou a pilha. Certificado vencido derruba a confiança dos clientes até a troca;
+sem certificado válido o nginx não sobe (veja
+`docker compose logs nginx`).
+
 
 ### Endpoints
 
@@ -291,7 +313,7 @@ Senhas nunca são auditadas nem registradas em log. O CPF é um campo comum e po
 
 ### Campanha de aceitação (AD real)
 
-`testes_aceitacao/` executa, com `curl`, todas as rotas contra a API em `127.0.0.1:8000`, que fala com o AD de desenvolvimento
+`testes_aceitacao/` executa, com `curl`, todas as rotas contra a API por HTTPS (nginx; destino pelo `.env`, ver `testes_aceitacao/README.md`), que fala com o AD de desenvolvimento
 (10 unidades e 72 contas, mantidas ao final). Cada fase (F0 a F9) roda **só com autorização do responsável**; a especificação e
 os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha nova, o conteúdo antigo das três árvores sob
 `OU=PML` precisa estar limpo. Detalhes em [`testes_aceitacao/README.md`](testes_aceitacao/README.md).
@@ -330,7 +352,10 @@ os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha no
 | Container: `permission denied` em `/app/logs` | a pasta `logs/` do host não é gravável por `API_UID:API_GID` (veja `id -u` e `chown`) |
 | Container não sobe ou `.env` virou pasta | o `.env` (ou o arquivo de `API_ENV_FILE`) tem de existir **antes** do `up` (`cp .env.example .env`); no Docker, montar um arquivo inexistente cria uma pasta com esse nome |
 | Aviso do Compose `variable "..." is not set` | o `.env` tem um `$` (hash do segredo); é só o Compose lendo o arquivo para interpolar e não afeta a API, que lê o arquivo sozinha. Entre aspas simples o aviso some |
-| Container: porta em uso | outro processo (a API local?) já usa `127.0.0.1:8000`; pare-o ou mude `API_PORT` |
+| Container: porta em uso | outro processo já usa 443/80; pare-o ou mude `HTTPS_PORT`/`HTTP_PORT` (e `REDIRECT_PORT`) |
+| nginx não sobe (`cannot load certificate`) | falta ou está inválido `.certs/fullchain.crt`/`.certs/fullchain.key` (peça o PEM à Infraestrutura) |
+| `curl: (60)` ou `unable to get local issuer certificate` | o cliente não confia na CA, ou o `fullchain.crt` só tem o certificado do servidor, sem o intermediário da CA: peça à Infraestrutura o arquivo com a cadeia completa. Para testar assim mesmo sem desligar a verificação, aponte `--cacert` (ou `ACEITACAO_CACERT`) para o próprio `fullchain.crt` |
+| nginx `Permission denied` em `/var/log/nginx` | `logs/nginx` precisa ser gravável pelo uid 101 do nginx (`mkdir -p logs/nginx && chown 101 logs/nginx`) |
 | Container `unhealthy` | `docker compose logs api`: `.env` incompleto (`Field required`) ou `AD_PML_BASE` inválido |
 | Pylance sublinhando imports | interpretador errado no VS Code — `Ctrl+Shift+P` → Select Interpreter |
 

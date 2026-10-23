@@ -23,7 +23,7 @@ echo "| | |"
 echo "|---|---|"
 echo "| **Especificação** | [especificacao-testes.md](especificacao-testes.md) |"
 echo "| **Commit do executor** | \`$(git -C "$RAIZ" rev-parse --short HEAD 2>/dev/null)\` |"
-echo "| **API / AD** | \`http://127.0.0.1:8000\` → \`$(env_val AD_SERVER)\` (LDAPS, TLS 1.0, certificado fixado) |"
+echo "| **API / AD** | \`${ACEITACAO_URL:-https://localhost}\` → \`$(env_val AD_SERVER)\` (LDAPS, TLS 1.0, certificado fixado) |"
 echo "| **\`PML_GRAVAR\`** | \`$(env_val PML_GRAVAR)\` (com \`false\`, o \`avisos\` dos \`pml*\` é o resultado esperado) |"
 echo "| **Início da campanha (UTC)** | $(sed -n 's/^instante_utc=//p' "$MARCA" 2>/dev/null | tr -d '\r') |"
 echo

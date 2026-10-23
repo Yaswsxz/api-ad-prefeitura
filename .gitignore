@@ -11,3 +11,5 @@ segredo_cliente_api.txt
 docs/testes/execucoes/.hdr.*
 # Logs e trilha de auditoria: tudo vive em logs/ e nada é apagado
 logs/
+certs/
+.certs/

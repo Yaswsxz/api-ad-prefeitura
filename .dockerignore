@@ -26,3 +26,9 @@ scripts
 README.md
 docker-compose.yml
 Dockerfile
+
+# Certificados e chaves do HTTPS: nunca na imagem
+certs
+.certs
+*.crt
+*.key

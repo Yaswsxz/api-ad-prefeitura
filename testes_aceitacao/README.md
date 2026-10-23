@@ -4,7 +4,7 @@ Especificação: [`docs/testes/especificacao-testes.md`](../docs/testes/especifi
 Resultado: `docs/testes/resultados-AAAA-MM-DD.md` (gerado por `relatorio.sh`).
 
 ## Requisitos
-API no ar em `127.0.0.1:8000`, `curl` e `jq` no WSL, `.env` e `segredo_cliente_api.txt` na raiz do projeto.
+API no ar atrás do nginx em HTTPS: o destino sai do `.env` ou do ambiente (`NGINX_SERVER_NAME` e `HTTPS_PORT`, com o nome do certificado resolvido para 127.0.0.1 só no `curl`; ou `ACEITACAO_URL`), `ACEITACAO_CACERT` opcional (a CA; se o `fullchain.crt` não traz o intermediário, use o próprio arquivo, relativo à raiz: `.certs/fullchain.crt`), `curl` e `jq` no WSL, `.env` e `segredo_cliente_api.txt` na raiz do projeto.
 O segredo é lido sem nunca ser impresso; token e `senha_inicial` não são gravados.
 
 ## Antes de uma campanha nova (árvore Humanos/NaoHumanos)

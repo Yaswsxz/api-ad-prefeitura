@@ -18,13 +18,30 @@ ACE_LOGS="$ACE_RAIZ/logs"
 ace_log_cat() { local f; for f in "$ACE_LOGS"/api_ad-*.log "$ACE_LOGS/api_ad.log"; do [ -f "$f" ] && cat "$f"; done; return 0; }
 ace_log_bytes() { ace_log_cat | wc -c; }
 ace_log_desde() { ace_log_cat | tail -c +$(( ${1:-0} + 1 )); }   # ace_log_desde OFFSET
-ACE_URL="http://127.0.0.1:8000"          # único destino permitido
 ACE_ADMIN="Supervisor de Testes"
 ACE_DATA="${ACEITACAO_DATA:-$(date +%F)}"
 ACE_MARCA="$ACE_SAIDA/marca.txt"
 
 _env() { grep -E "^$1=" "$ACE_RAIZ/.env" | tail -1 | cut -d= -f2- | tr -d '\r"'; }
 ACE_PML_BASE="$(_env AD_PML_BASE)"
+
+# Destino: a API atrás do nginx, em HTTPS. O certificado vem da Infraestrutura e é emitido para o nome do
+# servidor (NGINX_SERVER_NAME do .env): o curl resolve esse nome para 127.0.0.1 só nesta chamada (--resolve), sem DNS, e o
+# certificado é conferido normalmente. Sem NGINX_SERVER_NAME usa https://localhost. Porta: HTTPS_PORT do .env (padrão 443).
+# ACEITACAO_URL substitui o destino; ACEITACAO_CACERT (opcional) indica a CA, se o sistema não a confia. A campanha escreve no
+# AD: só se aceita localhost, 127.0.0.1 ou o nome do próprio servidor, sempre resolvido para 127.0.0.1.
+_porta_https="${HTTPS_PORT:-$(_env HTTPS_PORT)}"
+_nome_servidor="${NGINX_SERVER_NAME:-$(_env NGINX_SERVER_NAME)}"; [ "$_nome_servidor" = "_" ] && _nome_servidor=""
+ACE_URL="${ACEITACAO_URL:-https://${_nome_servidor:-localhost}${_porta_https:+:$_porta_https}}"
+_resto="${ACE_URL#*://}"; _hostport="${_resto%%/*}"; _host="${_hostport%%:*}"
+case "$_hostport" in *:*) _porta="${_hostport##*:}";; *) _porta=""; esac
+[ -n "$_porta" ] || { case "$ACE_URL" in https://*) _porta=443;; *) _porta=80;; esac; }
+ACE_CURL_TLS=()
+if [ "$_host" = localhost ] || [ "$_host" = 127.0.0.1 ]; then :
+elif [ -n "$_nome_servidor" ] && [ "$_host" = "$_nome_servidor" ]; then ACE_CURL_TLS+=(--resolve "$_host:$_porta:127.0.0.1")
+else echo "destino não permitido: $ACE_URL (só localhost, 127.0.0.1 ou NGINX_SERVER_NAME)" >&2; exit 2; fi
+ACE_CACERT="${ACEITACAO_CACERT:-}"
+[ -z "$ACE_CACERT" ] || ACE_CURL_TLS+=(--cacert "$ACE_CACERT")
 ACE_PML_GRAVAR="$(_env PML_GRAVAR | tr 'A-Z' 'a-z')"
 ACE_PML_GRAVAR="${ACEITACAO_PML_GRAVAR:-${ACE_PML_GRAVAR:-true}}"
 ACE_RETOMADA="${ACEITACAO_RETOMADA:-0}"
@@ -64,7 +81,7 @@ ace_token() {
   # o segredo entra no JSON por --rawfile e segue ao curl por stdin: nunca aparece em argumento
   corpo="$(jq -nc --arg i "$id" --rawfile s "$ACE_RAIZ/segredo_cliente_api.txt" \
            '{client_id:$i, client_secret:($s|rtrimstr("\n")|rtrimstr("\r"))}')"
-  resp="$(printf '%s' "$corpo" | curl -sS --max-time 30 -H 'Content-Type: application/json' \
+  resp="$(printf '%s' "$corpo" | curl -sS --max-time 30 "${ACE_CURL_TLS[@]}" -H 'Content-Type: application/json' \
           --data-binary @- "$ACE_URL/auth/token" 2>&1)" || true
   ACE_TOKEN="$(printf '%s' "$resp" | jq -r '.access_token // empty' 2>/dev/null)"
   unset corpo resp
@@ -86,7 +103,7 @@ header = \"Content-Type: application/json\""
   [ "$metodo" != GET ] && cfg+=$'\n'"header = \"X-Administrador: $ACE_ADMIN\""
   [ -n "${ACE_EXTRA_HEADER:-}" ] && cfg+=$'\n'"header = \"$ACE_EXTRA_HEADER\""
   [ -n "$corpo" ] && cfg+=$'\n'"data-raw = $(printf '%s' "$corpo" | jq -Rs .)"
-  resp="$(curl -sS --max-time 180 -D "$ACE_HDR" -w $'\n%{http_code} %{time_total}' -K <(printf '%s\n' "$cfg") 2>&1)" || true
+  resp="$(curl -sS --max-time 180 "${ACE_CURL_TLS[@]}" -D "$ACE_HDR" -w $'\n%{http_code} %{time_total}' -K <(printf '%s\n' "$cfg") 2>&1)" || true
   ultima="${resp##*$'\n'}"
   ACE_CORPO="${resp%$'\n'*}"
   ACE_STATUS="${ultima%% *}"

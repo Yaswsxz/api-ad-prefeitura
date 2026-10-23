@@ -1,22 +1,32 @@
-# API de Identidades no Active Directory (PML) — execução em container.
+# API de Identidades no Active Directory (PML) — execução em container com HTTPS.
 #
 #   cp .env.example .env     # e preencha (o arquivo nunca vai para a imagem nem para o Git)
+#   # coloque fullchain.crt e fullchain.key (da CA, pela Infraestrutura) em ./.certs
 #   docker compose up -d --build          # com Podman: podman compose up -d --build  (podman machine start antes, no Windows)
-#   docker compose logs -f api
+#   docker compose logs -f nginx api
 #
-# Tudo o que muda de ambiente para ambiente é variável; os padrões servem para desenvolvimento.
-# O Compose lê o .env do diretório para interpolar as variáveis API_* abaixo. A API recebe o .env (ou outro
+# Só o nginx é publicado no host: ele termina o TLS e fala HTTP com a API pela rede interna do Compose.
+#
+# Tudo o que muda de ambiente para ambiente é variável; os padrões são os de produção.
+# O Compose lê o .env do diretório para interpolar as variáveis abaixo. A API recebe o .env (ou outro
 # arquivo, em API_ENV_FILE) MONTADO em /app/.env e o lê sozinha, como fora do container. Não se usa env_file:
 # o Compose interpolaria o "$" do hash do segredo (pbkdf2_sha256$iter$salt$hash) e o corromperia.
 #
 #   API_ENV_FILE         arquivo de ambiente da API                        (padrão .env)
 #   API_CONFIG_DIR       pasta de configuração no host (regras.toml, tls/) (padrão ./config)
-#   API_LOGS_DIR         pasta de logs e auditoria no host                 (padrão ./logs)
-#   API_BIND / API_PORT  onde a porta é publicada no host                  (padrão 127.0.0.1:8000)
+#   API_LOGS_DIR         pasta de logs e auditoria no host                 (padrão ./logs; o nginx grava em logs/nginx)
+#   API_CERTS_DIR        pasta dos certificados HTTPS no host              (padrão ./.certs)
+#   NGINX_CONF_DIR       pasta do template do nginx                        (padrão ./config/nginx)
+#   NGINX_IMAGE          imagem do proxy                                   (padrão nginx-unprivileged:stable-alpine)
+#   HTTPS_BIND           interface em que 443/80 são publicadas            (padrão 0.0.0.0)
+#   HTTPS_PORT/HTTP_PORT portas públicas HTTPS e HTTP (redireciona)        (padrão 443 e 80)
+#   REDIRECT_PORT        sufixo de porta no redirecionamento HTTP->HTTPS   (padrão vazio; ":8443" se HTTPS_PORT=8443)
+#   NGINX_SERVER_NAME    nome(s) do servidor                               (padrão _ = qualquer)
+#   CERT_FILE / KEY_FILE nomes dos arquivos em API_CERTS_DIR               (padrão fullchain.crt / fullchain.key)
+#   HSTS_MAX_AGE         Strict-Transport-Security, em segundos            (padrão 0 = desligado; produção 31536000)
 #   API_UID / API_GID    dono dos arquivos criados em API_LOGS_DIR         (padrão 1000:1000)
-#   API_IMAGE_TAG        tag da imagem                                     (padrão local)
+#   API_IMAGE_TAG        tag da imagem da API                              (padrão local)
 #   TZ                   fuso: o log da API vira por dia local             (padrão America/Sao_Paulo)
-#   FORWARDED_ALLOW_IPS  IPs de proxy em que o uvicorn confia no X-Forwarded-For (padrão 127.0.0.1)
 
 services:
   api:
@@ -33,11 +43,13 @@ services:
       # AUDITORIA_CONTINGENCIA_FILE vazios no .env: caminhos do host não valem aqui dentro.
       LOG_DIR: /app/logs
       TZ: ${TZ:-America/Sao_Paulo}
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # A API não tem porta publicada: só o nginx a alcança, e ele SOBRESCREVE o X-Forwarded-For com o IP real do cliente.
+      # Por isso o uvicorn pode confiar no cabeçalho de qualquer origem na rede interna.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
       # Só se o handshake com o DC (TLS 1.0) falhar na imagem; ver README, "Execução em container":
       # OPENSSL_CONF: /app/config/openssl-legado.cnf
-    ports:
-      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+    expose:
+      - "8000"
     volumes:
       - ${API_ENV_FILE:-./.env}:/app/.env:ro             # o .env do host (o arquivo precisa existir)
       - ${API_CONFIG_DIR:-./config}:/app/config:ro
@@ -61,6 +73,44 @@ services:
       retries: 3
       start_period: 15s
     # Limita só a cópia do console mantida pelo Docker; os arquivos de logs/ não são tocados.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  # Proxy reverso HTTPS. Roda sem root (escuta 8443/8080 dentro do container). Os certificados são lidos de API_CERTS_DIR;
+  # ao trocá-los, reinicie: docker compose restart nginx. Sem certificado válido o nginx não sobe (veja os logs).
+  nginx:
+    image: ${NGINX_IMAGE:-docker.io/nginxinc/nginx-unprivileged:stable-alpine}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
+      CERT_FILE: ${CERT_FILE:-fullchain.crt}
+      KEY_FILE: ${KEY_FILE:-fullchain.key}
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-0}
+      REDIRECT_PORT: ${REDIRECT_PORT:-}
+      TZ: ${TZ:-America/Sao_Paulo}
+    ports:
+      - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PORT:-443}:8443"
+      - "${HTTPS_BIND:-0.0.0.0}:${HTTP_PORT:-80}:8080"
+    volumes:
+      - ${API_CERTS_DIR:-./.certs}:/etc/nginx/certs:ro
+      - ${NGINX_CONF_DIR:-./config/nginx}:/etc/nginx/templates:ro
+      - ${API_LOGS_DIR:-./logs}/nginx:/var/log/nginx      # um arquivo de acesso por dia; nada é apagado
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:8443/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     logging:
       driver: json-file
       options:

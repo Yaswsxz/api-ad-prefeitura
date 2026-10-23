@@ -1,0 +1,79 @@
+# Proxy reverso HTTPS da API (nginx-unprivileged: escuta 8080/8443 dentro do container).
+# Este arquivo é um template: as imagens oficiais do nginx substituem as variáveis ${...} do ambiente (envsubst) e
+# gravam o resultado em /etc/nginx/conf.d/. As variáveis do nginx ($host, $remote_addr...) não são tocadas.
+#
+#   NGINX_SERVER_NAME  nome(s) do servidor                       (padrão: _, qualquer nome)
+#   CERT_FILE/KEY_FILE arquivos em /etc/nginx/certs             (padrão: fullchain.crt / fullchain.key)
+#   HSTS_MAX_AGE       Strict-Transport-Security em segundos     (0 = desligado; produção: 31536000)
+#   REDIRECT_PORT      sufixo de porta no redirecionamento HTTP  (vazio na 443; ":8443" se o HTTPS usar outra porta)
+
+# Um arquivo de acesso por dia (acesso-AAAA-MM-DD.log): sem rotação e sem apagamento. O dia sai do próprio horário da requisição.
+map $time_iso8601 $dia_log {
+    "~^(?<d>\d{4}-\d{2}-\d{2})" $d;     # a regex com chaves precisa de aspas no nginx
+    default                     sem-data;
+}
+
+# Se o cliente mandou X-Request-ID usa o dele; senão, o id do nginx. O mesmo valor segue para a API e aparece nos dois logs.
+map $http_x_request_id $id_requisicao {
+    ""      $request_id;
+    default $http_x_request_id;
+}
+
+log_format api '$remote_addr [$time_iso8601] "$request" $status $body_bytes_sent '
+               'rt=$request_time urt=$upstream_response_time id=$id_requisicao ua="$http_user_agent"';
+
+open_log_file_cache max=8 inactive=60s valid=60s min_uses=1;
+
+# Com caminho de log variável o nginx exige que o diretório "root" exista (senão não grava o log). Nada é servido de lá.
+root /usr/share/nginx/html;
+
+# HTTP: nada é servido, só redireciona para HTTPS.
+server {
+    listen 8080;
+    server_name ${NGINX_SERVER_NAME};
+    server_tokens off;
+    access_log /var/log/nginx/acesso-$dia_log.log api;
+
+    location / {
+        return 301 https://$host${REDIRECT_PORT}$request_uri;
+    }
+}
+
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_name ${NGINX_SERVER_NAME};
+    server_tokens off;
+    access_log /var/log/nginx/acesso-$dia_log.log api;
+
+    ssl_certificate     /etc/nginx/certs/${CERT_FILE};
+    ssl_certificate_key /etc/nginx/certs/${KEY_FILE};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    # Perfil "intermediário" da Mozilla: sem RC4/3DES/CBC legado; a preferência é do cliente (todos os suportados são fortes).
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    client_max_body_size 1m;
+
+    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    location / {
+        proxy_pass http://api:8000;
+        proxy_http_version 1.1;
+        proxy_redirect off;
+        proxy_read_timeout 60s;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        # O nginx é a borda: o cabeçalho do cliente é DESCARTADO e substituído (impede falsificar o IP na auditoria e no limite de login).
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Request-ID      $id_requisicao;
+        # Sem cache: as respostas com senha carregam Cache-Control: no-store.
+    }
+}
