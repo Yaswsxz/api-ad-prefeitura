@@ -1,373 +1,440 @@
-﻿"""
-Service responsável pelas 4 operações de OU que ficaram sob minha
-responsabilidade: Criar OU e Alterar/Mover OU, para os 4 ramos
-(Direta, Indireta, Terceirizadas, Prepostos).
-
-Estrutura do AD assumida (ver app/core/config.py -> settings.AD_PML_BASE):
-
-    OU=PML
-     +-- OU=Operativos
-     |    +-- OU=Direta        (cada unidade aqui tem 4 subcontainers CN=)
-     |    |     +-- OU=<UNIDADE>
-     |    |          +-- CN=Estagio         (container)
-     |    |          +-- CN=Carreira        (container)
-     |    |          +-- CN=Comissionados   (container)
-     |    |          +-- CN=NaoHumanos      (container)
-     |    +-- OU=Indireta
-     |    +-- OU=Terceirizadas
-     |    +-- OU=Prepostos
-     +-- OU=Inoperantes        (espelho 1:1 de Operativos)
-     +-- OU=Desincorporados    (sem ramos fixos; nascem sob demanda)
-
-Regra de tipos:
-  - Árvores, ramos e unidades  →  OU  (organizationalUnit)
-  - Subcontainers da Direta    →  CN  (container)
 """
+Unidades (OUs) da estrutura: criar, alterar, consultar, desincorporar e
+reincorporar, nos 4 ramos. A forma da árvore está em app/core/arvore.py.
 
-from ldap3 import MODIFY_REPLACE, LEVEL
-from ldap3.core.exceptions import LDAPException
+Uma unidade tem DOIS lados em cada árvore, o de Humanos e o de NaoHumanos; toda
+operação de unidade age nos dois. O lado Humanos é o que as listagens e os DNs principais mostram.
+"""
+from functools import partial
+from typing import NamedTuple, Optional
+
 from fastapi import HTTPException
-from datetime import datetime, timezone
+from ldap3 import BASE, LEVEL, SUBTREE
+from ldap3.utils.conv import escape_filter_chars
 
+from app.audit_service import Acao, executar_auditado, marcar_inconsistente
+from app.core.arvore import (
+    ARVORES_ESPELHADAS, HUMANO, NAO_HUMANO, OUS_INTERNAS_DIRETA, Arvore, Ramo, TipoIdentidade,
+    dn_arvore, dn_ramo, dn_tipo, dn_unidade, dns_da_unidade, local_da_unidade, rdn_ou,
+)
+from app.core.atributos import (
+    DESINCORPORADO, PML_NOME_ORGAO, REINCORPORADO, bloqueada, bloquear, desbloquear, texto,
+)
 from app.core.config import settings
-from app.core.ldap_connection import get_connection
+from app.core.contexto import Contexto
+from app.core.erros_ad import tratar_erros
+from app.core.ldap_connection import buscar, conexao
 from app.core.logging_config import logger
-from app.schemas.estrutura import RamoOU, OUCreate, OUUpdate, OUMover, OUOut
-from app.services.ad_service import _registrar_atividade
-
-# Subcontainers fixos que só existem dentro de unidades do ramo Direta.
-# Estes continuam sendo containers (objectClass=container), não OUs.
-SUBCONTAINERS_DIRETA = ["Estagio", "Carreira", "Comissionados", "NaoHumanos"]
-
-
-# =============================================================================
-# DN helpers
-# =============================================================================
-
-def _dn_ramo(arvore: str, ramo: RamoOU) -> str:
-    """DN do ramo dentro de uma árvore: OU=<ramo>,OU=<arvore>,<PML_BASE>."""
-    return f"OU={ramo.value},OU={arvore},{settings.AD_PML_BASE}"
+from app.core.raiz import mascarar_dn
+from app.schemas.estrutura import (
+    AtoUnidade, OUCreate, OUOut, OUUpdate, UnidadeItem, UnidadeListOut, UnidadeMovidaOut, UnidadeOut,
+)
+from app.services.base_ad import (
+    alterar_uac, contas_da_unidade, data_do_ato, gravar_pml, reverter, unidade_existe,
+)
 
 
-def _dn_unidade(arvore: str, ramo: RamoOU, nome: str) -> str:
-    """DN de uma unidade: OU=<nome>,OU=<ramo>,OU=<arvore>,<PML_BASE>."""
-    return f"OU={nome},{_dn_ramo(arvore, ramo)}"
+class UnidadeAchada(NamedTuple):
+    dn: str
+    arvore: Arvore
+    ramo: Ramo
+    tipo: TipoIdentidade
+    pml_nome_orgao: Optional[str]
 
 
 # =============================================================================
-# Existência
+# Leitura
 # =============================================================================
+
+def _achar_unidades(conn, nome: str) -> list[UnidadeAchada]:
+    """Todas as ocorrências de uma unidade, em qualquer ramo, árvore e lado, sob AD_PML_BASE."""
+    achadas = buscar(
+        conn, settings.AD_PML_BASE,
+        f"(&(objectClass=organizationalUnit)(ou={escape_filter_chars(nome)}))",
+        SUBTREE, ["ou", PML_NOME_ORGAO],
+    )
+    unidades = []
+    for entrada in achadas:
+        local = local_da_unidade(entrada["dn"])
+        if local:  # ignora OUs que não estão no formato <unidade>/<ramo>/<tipo>/<árvore>
+            unidades.append(UnidadeAchada(
+                dn=entrada["dn"], arvore=local[0], ramo=local[1], tipo=local[2],
+                pml_nome_orgao=texto(entrada.get("attributes", {}), PML_NOME_ORGAO),
+            ))
+    return unidades
+
+
+def _ler_pml_nome(conn, dn: str) -> Optional[str]:
+    achadas = buscar(conn, dn, "(objectClass=*)", BASE, [PML_NOME_ORGAO])
+    return texto(achadas[0].get("attributes", {}), PML_NOME_ORGAO) if achadas else None
+
 
 def _existe_filho(conn, parent_dn: str, nome: str) -> bool:
-    """
-    Verifica se existe um filho direto com cn=<nome> OU ou=<nome> sob parent_dn.
-    Aceita os dois porque containers usam cn= e OUs usam ou=.
-    """
-    conn.search(
-        search_base=parent_dn,
-        search_filter=f"(|(cn={nome})(ou={nome}))",
-        search_scope=LEVEL,
-    )
-    return len(conn.entries) > 0
+    """Existe um filho direto com cn=<nome> ou ou=<nome> sob parent_dn?"""
+    valor = escape_filter_chars(nome)
+    return len(buscar(conn, parent_dn, f"(|(cn={valor})(ou={valor}))", LEVEL, ["distinguishedName"])) > 0
 
 
-def _unidade_existe(conn, dn: str) -> bool:
-    """Verifica se um DN específico existe em qualquer ponto do PML."""
-    conn.search(
-        search_base=settings.AD_PML_BASE,
-        search_filter=f"(distinguishedName={dn})",
-        search_scope="SUBTREE",
+@tratar_erros
+def listar_unidades(ramo: Ramo, arvore: Arvore, limite: int, deslocamento: int) -> UnidadeListOut:
+    """Lista paginada das unidades de um ramo, numa árvore (lado Humanos)."""
+    with conexao() as conn:
+        entradas = buscar(conn, dn_ramo(arvore, ramo), "(objectClass=organizationalUnit)",
+                          LEVEL, ["ou", PML_NOME_ORGAO])
+    itens = sorted(
+        (
+            UnidadeItem(
+                nome=texto(e.get("attributes", {}), "ou") or e["dn"].split(",", 1)[0][3:],
+                ramo=ramo,
+                arvore=arvore,
+                pml_nome_orgao=texto(e.get("attributes", {}), PML_NOME_ORGAO),
+                distinguished_name=e["dn"],
+            )
+            for e in entradas
+        ),
+        key=lambda i: i.nome,
     )
-    return len(conn.entries) > 0
+    return UnidadeListOut(
+        total=len(itens), limite=limite, deslocamento=deslocamento,
+        items=itens[deslocamento:deslocamento + limite],
+    )
+
+
+@tratar_erros
+def consultar_unidade(ramo: Ramo, nome: str) -> UnidadeOut:
+    """Uma unidade pelo nome, com as árvores em que existe e os DNs dos dois lados."""
+    nome = nome.strip().upper()
+    with conexao() as conn:
+        achadas = [u for u in _achar_unidades(conn, nome) if u.ramo == ramo]
+    if not achadas:
+        raise HTTPException(status_code=404, detail=f"Unidade '{nome}' não encontrada no ramo {ramo.ou}")
+    # Prefere o valor de Operativos; senão, o primeiro encontrado.
+    achadas.sort(key=lambda u: (u.arvore is not Arvore.OPERATIVOS, u.tipo is not HUMANO))
+    return UnidadeOut(
+        nome=nome,
+        ramo=ramo,
+        arvores=sorted({u.arvore for u in achadas}, key=lambda a: a.value),
+        pml_nome_orgao=next((u.pml_nome_orgao for u in achadas if u.pml_nome_orgao), None),
+        distinguished_names={u.arvore: u.dn for u in achadas if u.tipo is HUMANO},
+        distinguished_names_nao_humanos={u.arvore: u.dn for u in achadas if u.tipo is NAO_HUMANO},
+    )
 
 
 # =============================================================================
-# Criação — OU e container separados
+# Estrutura fixa e criação de OUs
 # =============================================================================
 
-def _criar_ou(conn, parent_dn: str, nome: str, extras: dict = None) -> str:
-    """
-    Cria uma Organizational Unit (OU) sob parent_dn.
-    Retorna o DN criado. Lança HTTPException se falhar.
-    """
-    dn = f"OU={nome},{parent_dn}"
-    attrs = {
-        "objectClass": ["top", "organizationalUnit"],
-        "ou": nome,
-    }
-    if extras:
-        attrs.update(extras)
-
-    ok = conn.add(dn, attributes=attrs)
-    if not ok:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Falha ao criar OU '{dn}': {conn.result}",
-        )
+def _criar_ou(conn, parent_dn: str, nome: str) -> str:
+    """Cria uma OU sob parent_dn e devolve o DN criado."""
+    dn = f"{rdn_ou(nome)},{parent_dn}"
+    conn.add(dn, attributes={"objectClass": ["top", "organizationalUnit"], "ou": nome})
     return dn
 
 
-def _criar_container(conn, parent_dn: str, nome: str) -> str:
-    """
-    Cria um container (objectClass=container) sob parent_dn.
-    Usado APENAS para os 4 subcontainers fixos da Direta
-    (Estagio, Carreira, Comissionados, NaoHumanos).
-    Retorna o DN criado.
-    """
-    dn = f"CN={nome},{parent_dn}"
-    ok = conn.add(dn, attributes={
-        "objectClass": ["top", "container"],
-        "cn": nome,
-    })
-    if not ok:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Falha ao criar container '{dn}': {conn.result}",
-        )
-    return dn
-
-
-def _garantir_ou(conn, parent_dn: str, nome: str, extras: dict = None) -> str:
+def _garantir_ou(conn, parent_dn: str, nome: str) -> str:
     """Cria a OU se não existir; devolve o DN dela em qualquer caso."""
     if _existe_filho(conn, parent_dn, nome):
-        return f"OU={nome},{parent_dn}"
-    return _criar_ou(conn, parent_dn, nome, extras)
+        return f"{rdn_ou(nome)},{parent_dn}"
+    return _criar_ou(conn, parent_dn, nome)
 
 
-def _garantir_container(conn, parent_dn: str, nome: str) -> str:
-    """Cria o container se não existir; devolve o DN dele em qualquer caso."""
-    if _existe_filho(conn, parent_dn, nome):
-        return f"CN={nome},{parent_dn}"
-    return _criar_container(conn, parent_dn, nome)
+def _garantir_ramo(conn, arvore: Arvore, tipo: TipoIdentidade, ramo: Ramo) -> str:
+    """
+    Garante os nós fixos <ramo>/<tipo>/<árvore> (criados se faltarem, como o ramo de
+    Desincorporados sempre foi) e devolve o DN do ramo. A OU da árvore tem de existir.
+    """
+    _garantir_ou(conn, dn_arvore(arvore), tipo.ou)
+    return _garantir_ou(conn, dn_tipo(arvore, tipo), ramo.ou)
+
+
+def _desfazer_criacao(conn, criados: list[str]) -> None:
+    """Remove, dos mais novos para os mais antigos, o que a operação já criou."""
+    for dn in reversed(criados):
+        reverter(partial(conn.delete, dn),
+                 f"não foi possível desfazer a criação de {mascarar_dn(dn)}; remover manualmente")
+
+
+def _exigir_arvore(conn, arvore: Arvore) -> None:
+    if not unidade_existe(conn, dn_arvore(arvore)):
+        raise HTTPException(status_code=409, detail=f"Estrutura base ausente no AD: OU={arvore.ou}")
+
+
+def _exigir_lados(conn, nome: str, ramo: Ramo, arvore: Arvore, *, ausente: str) -> tuple[str, str]:
+    """
+    DNs (Humanos, NaoHumanos) da unidade na árvore. Sem o lado Humanos, 404 com `ausente`;
+    com Humanos e sem NaoHumanos, 409: a estrutura está incompleta (não se adivinha o que fazer).
+    """
+    dn_h, dn_nh = dns_da_unidade(arvore, ramo, nome)
+    if not unidade_existe(conn, dn_h):
+        raise HTTPException(status_code=404, detail=ausente)
+    if not unidade_existe(conn, dn_nh):
+        raise HTTPException(
+            status_code=409,
+            detail=f"A unidade '{nome}' está incompleta em {arvore.ou}/{ramo.ou}: falta o lado NaoHumanos",
+        )
+    return dn_h, dn_nh
 
 
 # =============================================================================
-# Operação: Criar OU
+# Criar
 # =============================================================================
 
-def criar_ou(ramo: RamoOU, dados: OUCreate, ip_address: str = None, user_agent: str = None,
-             operator: str = "system") -> OUOut:
+@tratar_erros
+def criar_ou(ramo: Ramo, dados: OUCreate, ctx: Contexto) -> OUOut:
     """
-    Cria uma nova unidade dentro do ramo indicado, em Operativos E em
-    Inoperantes (espelhado). Se o ramo for Direta, também cria os 4
-    subcontainers fixos (Estagio, Carreira, Comissionados, NaoHumanos)
-    nas duas cópias.
+    Cria a unidade em Operativos E em Inoperantes, em cada uma nos lados Humanos e NaoHumanos
+    (4 OUs). Na Direta, o lado Humanos nasce com as OUs de categoria. Depois grava
+    pmlNomeOrgao nas 4. Se qualquer passo falhar, o que a operação criou é desfeito (os nós
+    fixos garantidos permanecem).
+
+    O nome é único em toda a árvore: existir em qualquer ramo, árvore ou lado,
+    inclusive Desincorporados, resulta em 409.
     """
-    dn_operativos = _dn_unidade("Operativos", ramo, dados.nome)
-    dn_inoperantes = _dn_unidade("Inoperantes", ramo, dados.nome)
+    return executar_auditado(
+        ctx, Acao.CRIAR_UNIDADE, dados.nome,
+        {"ramo": ramo.ou, "pml_nome_orgao": dados.pml_nome_orgao or dados.nome},
+        lambda: _executar_criar(ramo, dados),
+    )
+
+
+def _executar_criar(ramo: Ramo, dados: OUCreate) -> tuple[OUOut, dict]:
     pml_nome_orgao = dados.pml_nome_orgao or dados.nome
-    conn = get_connection()
-    try:
-        if _unidade_existe(conn, dn_operativos):
+    criados: list[str] = []
+    avisos: list[str] = []
+    with conexao() as conn:
+        existentes = _achar_unidades(conn, dados.nome)
+        if existentes:
+            locais = sorted({f"{u.arvore.ou}/{u.tipo.ou}/{u.ramo.ou}" for u in existentes})
             raise HTTPException(
-                status_code=409,
-                detail=f"Já existe uma unidade '{dados.nome}' em Operativos/{ramo.value}",
+                status_code=409, detail=f"Já existe uma unidade '{dados.nome}' em {', '.join(locais)}",
             )
+        for arvore in ARVORES_ESPELHADAS:
+            _exigir_arvore(conn, arvore)
 
-        # 1. Cria a unidade em Operativos (com pmlNomeOrgao)
-                # 1. Cria a unidade em Operativos
-        # ⚠️ pmlNomeOrgao ainda não existe no schema do AD.
-        # Quando for criado pelo admin do domínio, descomente a linha abaixo
-        # e remova o `extras=None`.
-        extras = None
-        # extras = {"pmlNomeOrgao": pml_nome_orgao}
-        _criar_ou(conn, _dn_ramo("Operativos", ramo), dados.nome, extras=extras)
+        try:
+            for arvore in ARVORES_ESPELHADAS:
+                for tipo in (HUMANO, NAO_HUMANO):
+                    pai = _garantir_ramo(conn, arvore, tipo, ramo)
+                    dn = _criar_ou(conn, pai, dados.nome)
+                    criados.append(dn)
+                    if tipo is HUMANO and ramo is Ramo.DIRETA:
+                        for interna in OUS_INTERNAS_DIRETA:
+                            criados.append(_criar_ou(conn, dn, interna))
 
-        # 2. Cria a unidade espelhada em Inoperantes (sem pmlNomeOrgao)
-        _criar_ou(conn, _dn_ramo("Inoperantes", ramo), dados.nome)
+            # Se pmlNomeOrgao ainda não existir no schema, falha aqui com
+            # AD_SCHEMA_INCOMPLETO e a criação acima é desfeita.
+            for arvore in ARVORES_ESPELHADAS:
+                for dn in dns_da_unidade(arvore, ramo, dados.nome):
+                    gravar_pml(conn, dn, {PML_NOME_ORGAO: pml_nome_orgao}, avisos)
+        except Exception:
+            _desfazer_criacao(conn, criados)
+            raise
 
-        # 3. Se for Direta, cria os 4 subcontainers (CN=) em ambas as cópias
-        if ramo == RamoOU.DIRETA:
-            for dn_unidade in (dn_operativos, dn_inoperantes):
-                for sub in SUBCONTAINERS_DIRETA:
-                    _garantir_container(conn, dn_unidade, sub)
-
-        _registrar_atividade(
-            operator=operator,
-            action="CREATE_OU",
-            target_user=dados.nome,
-            details={
-                "ramo": ramo.value,
-                "pml_nome_orgao": pml_nome_orgao,
-                "subcontainers_criados": SUBCONTAINERS_DIRETA if ramo == RamoOU.DIRETA else [],
-            },
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return OUOut(
-            nome=dados.nome,
-            ramo=ramo,
-            pml_nome_orgao=pml_nome_orgao,
-            distinguished_name_operativos=dn_operativos,
-            distinguished_name_inoperantes=dn_inoperantes,
-        )
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em criar_ou (ramo={ramo}, nome={dados.nome}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em criar_ou (ramo={ramo}, nome={dados.nome}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
+    saida = OUOut(
+        nome=dados.nome,
+        ramo=ramo,
+        pml_nome_orgao=pml_nome_orgao,
+        distinguished_name_operativos=dn_unidade(Arvore.OPERATIVOS, ramo, dados.nome, HUMANO),
+        distinguished_name_inoperantes=dn_unidade(Arvore.INOPERANTES, ramo, dados.nome, HUMANO),
+        distinguished_name_operativos_nao_humanos=dn_unidade(Arvore.OPERATIVOS, ramo, dados.nome, NAO_HUMANO),
+        distinguished_name_inoperantes_nao_humanos=dn_unidade(Arvore.INOPERANTES, ramo, dados.nome, NAO_HUMANO),
+        avisos=avisos,
+    )
+    return saida, {"pml_gravado": not avisos,
+                   "ous_internas": list(OUS_INTERNAS_DIRETA) if ramo is Ramo.DIRETA else []}
 
 
 # =============================================================================
-# Operação: Alterar OU
+# Alterar
 # =============================================================================
 
-def alterar_ou(ramo: RamoOU, nome: str, dados: OUUpdate, ip_address: str = None,
-                user_agent: str = None, operator: str = "system") -> OUOut:
+@tratar_erros
+def alterar_ou(ramo: Ramo, nome: str, dados: OUUpdate, ctx: Contexto) -> OUOut:
     """
-    Altera pmlNomeOrgao de uma unidade. Só é permitido em unidades que
-    estão em Operativos (regra: não é possível alterar desincorporadas).
+    Altera pmlNomeOrgao nas 4 OUs da unidade (dois lados em Operativos e em Inoperantes). Só vale
+    para unidade que está em Operativos (desincorporadas não são alteráveis). Se uma gravação
+    falhar, as anteriores voltam ao valor anterior.
     """
-    dn_operativos = _dn_unidade("Operativos", ramo, nome)
+    return executar_auditado(
+        ctx, Acao.ALTERAR_UNIDADE, nome, {"ramo": ramo.ou, "pml_nome_orgao": dados.pml_nome_orgao},
+        lambda: _executar_alterar(ramo, nome, dados),
+    )
 
-    conn = get_connection()
+
+def _executar_alterar(ramo: Ramo, nome: str, dados: OUUpdate) -> tuple[OUOut, dict]:
+    avisos: list[str] = []
+
+    with conexao() as conn:
+        dn_oh, dn_onh = _exigir_lados(
+            conn, nome, ramo, Arvore.OPERATIVOS,
+            ausente=f"Unidade '{nome}' não encontrada em Operativos/{ramo.ou} "
+                    f"(não é possível alterar unidades desincorporadas)",
+        )
+        dn_ih, dn_inh = dns_da_unidade(Arvore.INOPERANTES, ramo, nome)
+        for dn in (dn_ih, dn_inh):
+            if not unidade_existe(conn, dn):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"O espelho da unidade '{nome}' em Inoperantes/{ramo.ou} está incompleto no AD",
+                )
+        lados = (dn_oh, dn_onh, dn_ih, dn_inh)
+
+        # Com PML_GRAVAR=false nada é gravado (só avisa) e não há o que restaurar.
+        anteriores = {dn: _ler_pml_nome(conn, dn) for dn in lados} if settings.PML_GRAVAR else {}
+        alterados: list[str] = []
+        try:
+            for dn in lados:
+                # Se pmlNomeOrgao não existir no schema: AD_SCHEMA_INCOMPLETO.
+                gravar_pml(conn, dn, {PML_NOME_ORGAO: dados.pml_nome_orgao}, avisos)
+                alterados.append(dn)
+        except Exception:
+            for dn in reversed(alterados):
+                reverter(partial(gravar_pml, conn, dn, {PML_NOME_ORGAO: anteriores[dn]}, []),
+                         f"não foi possível restaurar {PML_NOME_ORGAO} em {mascarar_dn(dn)}")
+            raise
+
+    saida = OUOut(
+        nome=nome,
+        ramo=ramo,
+        pml_nome_orgao=dados.pml_nome_orgao,
+        distinguished_name_operativos=dn_oh,
+        distinguished_name_inoperantes=dn_ih,
+        distinguished_name_operativos_nao_humanos=dn_onh,
+        distinguished_name_inoperantes_nao_humanos=dn_inh,
+        avisos=avisos,
+    )
+    return saida, {"pml_gravado": not avisos}
+
+
+# =============================================================================
+# Desincorporar e reincorporar
+# =============================================================================
+
+def _mover_lados(conn, nome: str, origem: tuple[str, str], destino_pai: tuple[str, str],
+                 destino_final: tuple[str, str], pai_origem: tuple[str, str]) -> None:
+    """
+    Move os dois lados da unidade (primeiro NaoHumanos, depois Humanos). Se o segundo move falhar,
+    o primeiro volta; se o retorno também falhar, fica INCONSISTENTE (a causa original sobe).
+    """
+    conn.modify_dn(origem[1], rdn_ou(nome), new_superior=destino_pai[1])
     try:
-        if not _unidade_existe(conn, dn_operativos):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Unidade '{nome}' não encontrada em Operativos/{ramo.value} "
-                       f"(não é possível alterar unidades desincorporadas)",
+        conn.modify_dn(origem[0], rdn_ou(nome), new_superior=destino_pai[0])
+    except Exception:
+        reverter(partial(conn.modify_dn, destino_final[1], rdn_ou(nome), new_superior=pai_origem[1]),
+                 f"o lado NaoHumanos da unidade '{nome}' foi movido e o lado Humanos não; "
+                 f"o retorno falhou ({mascarar_dn(destino_final[1])})")
+        raise
+
+
+@tratar_erros
+def desincorporar_unidade(ramo: Ramo, nome: str, ato: AtoUnidade, ctx: Contexto) -> UnidadeMovidaOut:
+    """
+    Tira a unidade de Operativos e a leva para Desincorporados, com todo o conteúdo, nos dois
+    lados (Humanos e NaoHumanos). Ordem: (1) grava pmlDesincorporado*, (2) bloqueia as contas
+    habilitadas dos dois lados, (3) move os lados. A OU espelho em Inoperantes não é tocada. Se o
+    passo 1 falhar (ex.: schema), nada foi alterado. Se o passo 2 ou 3 falhar, as contas já
+    bloqueadas CONTINUAM bloqueadas (falha segura): registra INCONSISTENTE; repetir a operação é
+    seguro, pois contas já bloqueadas são puladas.
+    """
+    nome = nome.strip().upper()
+    data = data_do_ato(ato)
+    return executar_auditado(
+        ctx, Acao.DESINCORPORAR_UNIDADE, nome,
+        {"ramo": ramo.ou, "instrumento": ato.instrumento, "data": data},
+        lambda: _executar_desincorporar(ramo, nome, ato, data),
+    )
+
+
+def _executar_desincorporar(ramo: Ramo, nome: str, ato: AtoUnidade, data: str) -> tuple[UnidadeMovidaOut, dict]:
+    final = dns_da_unidade(Arvore.DESINCORPORADOS, ramo, nome)
+    avisos: list[str] = []
+    bloqueadas: list[str] = []
+
+    with conexao() as conn:
+        atual = _exigir_lados(conn, nome, ramo, Arvore.OPERATIVOS,
+                              ausente=f"Unidade '{nome}' não encontrada em Operativos/{ramo.ou}")
+        if any(unidade_existe(conn, dn) for dn in final):
+            raise HTTPException(status_code=409, detail=f"A unidade '{nome}' já existe em Desincorporados/{ramo.ou}")
+        # Os nós fixos de Desincorporados são criados se faltarem.
+        pais = (_garantir_ramo(conn, Arvore.DESINCORPORADOS, HUMANO, ramo),
+                _garantir_ramo(conn, Arvore.DESINCORPORADOS, NAO_HUMANO, ramo))
+        pais_origem = (dn_ramo(Arvore.OPERATIVOS, ramo, HUMANO), dn_ramo(Arvore.OPERATIVOS, ramo, NAO_HUMANO))
+
+        for dn in atual:
+            gravar_pml(conn, dn, DESINCORPORADO.valores(ato.instrumento, data), avisos)
+        try:
+            for conta in contas_da_unidade(conn, *atual):
+                if bloqueada(conta.uac):
+                    continue  # já bloqueada: preserva o estado
+                alterar_uac(conn, conta.dn, bloquear(conta.uac))
+                bloqueadas.append(conta.login)
+            _mover_lados(conn, nome, atual, pais, final, pais_origem)
+        except Exception:
+            if bloqueadas:
+                logger.error(
+                    f"INCONSISTENTE: desincorporar '{nome}' falhou depois de bloquear {len(bloqueadas)} "
+                    "conta(s); elas permanecem bloqueadas na unidade em Operativos. Repetir é seguro."
+                )
+                marcar_inconsistente()
+            raise
+
+    saida = UnidadeMovidaOut(nome=nome, ramo=ramo, distinguished_name=final[0],
+                             distinguished_name_nao_humanos=final[1],
+                             instrumento=ato.instrumento, data=data, contas=bloqueadas, avisos=avisos)
+    return saida, {"contas_bloqueadas": bloqueadas, "pml_gravado": not avisos}
+
+
+@tratar_erros
+def reincorporar_unidade(ramo: Ramo, nome: str, ato: AtoUnidade, ctx: Contexto) -> UnidadeMovidaOut:
+    """
+    Traz de volta a unidade de Desincorporados para Operativos (os dois lados) e desbloqueia
+    TODAS as contas dela, inclusive as que já estavam bloqueadas antes.
+    Ordem: (1) grava pmlReincorporado*, (2) move, (3) desbloqueia as contas.
+    Se o passo 3 falhar no meio, a unidade já está em Operativos e parte das contas segue
+    bloqueada: registra INCONSISTENTE e informa quantas faltam.
+    """
+    nome = nome.strip().upper()
+    data = data_do_ato(ato)
+    return executar_auditado(
+        ctx, Acao.REINCORPORAR_UNIDADE, nome,
+        {"ramo": ramo.ou, "instrumento": ato.instrumento, "data": data},
+        lambda: _executar_reincorporar(ramo, nome, ato, data),
+    )
+
+
+def _executar_reincorporar(ramo: Ramo, nome: str, ato: AtoUnidade, data: str) -> tuple[UnidadeMovidaOut, dict]:
+    final = dns_da_unidade(Arvore.OPERATIVOS, ramo, nome)
+    avisos: list[str] = []
+    desbloqueadas: list[str] = []
+
+    with conexao() as conn:
+        atual = _exigir_lados(conn, nome, ramo, Arvore.DESINCORPORADOS,
+                              ausente=f"Unidade '{nome}' não encontrada em Desincorporados/{ramo.ou}")
+        if any(unidade_existe(conn, dn) for dn in final):
+            raise HTTPException(status_code=409, detail=f"A unidade '{nome}' já existe em Operativos/{ramo.ou}")
+        pais = (_garantir_ramo(conn, Arvore.OPERATIVOS, HUMANO, ramo),
+                _garantir_ramo(conn, Arvore.OPERATIVOS, NAO_HUMANO, ramo))
+        pais_origem = (dn_ramo(Arvore.DESINCORPORADOS, ramo, HUMANO), dn_ramo(Arvore.DESINCORPORADOS, ramo, NAO_HUMANO))
+
+        for dn in atual:
+            gravar_pml(conn, dn, REINCORPORADO.valores(ato.instrumento, data), avisos)
+        _mover_lados(conn, nome, atual, pais, final, pais_origem)
+
+        try:
+            for conta in contas_da_unidade(conn, *final):
+                if not bloqueada(conta.uac):
+                    continue  # já habilitada
+                alterar_uac(conn, conta.dn, desbloquear(conta.uac))
+                desbloqueadas.append(conta.login)
+        except Exception:
+            logger.error(
+                f"INCONSISTENTE: reincorporar '{nome}' moveu a unidade, mas desbloqueou só "
+                f"{len(desbloqueadas)} conta(s); as demais seguem bloqueadas em Operativos."
             )
+            marcar_inconsistente()
+            raise
 
-        ok = conn.modify(dn_operativos, {
-            "pmlNomeOrgao": [(MODIFY_REPLACE, [dados.pml_nome_orgao])],
-        })
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao alterar unidade: {conn.result}")
-
-        _registrar_atividade(
-            operator=operator,
-            action="UPDATE_OU",
-            target_user=nome,
-            details={"ramo": ramo.value, "pml_nome_orgao": dados.pml_nome_orgao},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return OUOut(
-            nome=nome,
-            ramo=ramo,
-            pml_nome_orgao=dados.pml_nome_orgao,
-            distinguished_name_operativos=dn_operativos,
-        )
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em alterar_ou (ramo={ramo}, nome={nome}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em alterar_ou (ramo={ramo}, nome={nome}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
-
-
-# =============================================================================
-# Operação: Desincorporar OU
-# =============================================================================
-
-def mover_ou_desincorporar(ramo: RamoOU, nome: str, dados: OUMover, ip_address: str = None,
-                            user_agent: str = None, operator: str = "system") -> OUOut:
-    """
-    Desincorpora uma unidade: move de Operativos/<ramo> para
-    Desincorporados/<ramo>, registrando instrumento e data.
-    Não mexe em Inoperantes.
-    """
-    dn_atual = _dn_unidade("Operativos", ramo, nome)
-    dn_destino_pai = _dn_ramo("Desincorporados", ramo)
-    data_hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    conn = get_connection()
-    try:
-        if not _unidade_existe(conn, dn_atual):
-            raise HTTPException(status_code=404, detail=f"Unidade '{nome}' não encontrada em Operativos/{ramo.value}")
-
-        # Garante que o ramo destino existe em Desincorporados (cria como OU)
-        _garantir_ou(conn, f"OU=Desincorporados,{settings.AD_PML_BASE}", ramo.value)
-
-        ok = conn.modify(dn_atual, {
-            "pmlDesincorporadoInstrumento": [(MODIFY_REPLACE, [dados.instrumento])],
-            "pmlDesincorporadoData": [(MODIFY_REPLACE, [data_hoje])],
-        })
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao gravar dados de desincorporação: {conn.result}")
-
-        # RDN é OU=<nome> (mudou de CN= para OU=)
-        conn.modify_dn(dn_atual, f"OU={nome}", new_superior=dn_destino_pai)
-        if conn.result["result"] != 0:
-            raise HTTPException(status_code=500, detail=f"Falha ao mover unidade: {conn.result}")
-
-        dn_final = f"OU={nome},{dn_destino_pai}"
-
-        _registrar_atividade(
-            operator=operator,
-            action="DESINCORPORAR_OU",
-            target_user=nome,
-            details={"ramo": ramo.value, "instrumento": dados.instrumento, "data": data_hoje},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return OUOut(nome=nome, ramo=ramo, distinguished_name_operativos=dn_final)
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em mover_ou_desincorporar (ramo={ramo}, nome={nome}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em mover_ou_desincorporar (ramo={ramo}, nome={nome}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
-
-
-# =============================================================================
-# Operação: Remover OU fisicamente
-# =============================================================================
-
-def remover_ou_fisicamente(ramo: RamoOU, nome: str, ip_address: str = None,
-                            user_agent: str = None, operator: str = "system") -> None:
-    """
-    Remove fisicamente uma unidade do AD. Só é permitido para unidades que
-    já estão em Desincorporados (primeiro desincorpora, depois remove).
-    """
-    dn = _dn_unidade("Desincorporados", ramo, nome)
-
-    conn = get_connection()
-    try:
-        if not _unidade_existe(conn, dn):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Unidade '{nome}' não encontrada em Desincorporados/{ramo.value} "
-                       f"(só é possível remover fisicamente unidades já desincorporadas)",
-            )
-
-        ok = conn.delete(dn)
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao remover unidade: {conn.result}")
-
-        _registrar_atividade(
-            operator=operator,
-            action="DELETE_OU",
-            target_user=nome,
-            details={"ramo": ramo.value, "dn": dn},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em remover_ou_fisicamente (ramo={ramo}, nome={nome}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em remover_ou_fisicamente (ramo={ramo}, nome={nome}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-
-        conn.unbind()
+    saida = UnidadeMovidaOut(nome=nome, ramo=ramo, distinguished_name=final[0],
+                             distinguished_name_nao_humanos=final[1],
+                             instrumento=ato.instrumento, data=data, contas=desbloqueadas, avisos=avisos)
+    return saida, {"contas_desbloqueadas": desbloqueadas, "pml_gravado": not avisos}

@@ -1,0 +1,16 @@
+# Regras configuráveis da API.
+#
+# ATENÇÃO: este arquivo é a ÚNICA barreira dos atributos que o PATCH pode alterar.
+# Listar aqui um atributo de sistema do AD (sAMAccountName, cn, userAccountControl,
+# memberOf, objectClass, unicodePwd) ou um pml* gravado por operação
+# (pmlDestituido*, pmlAtivado*, pmlTransferido*, pmlDesincorporado*...) o tornaria
+# alterável por PATCH. Trate como configuração sensível: mude só com revisão.
+# A princípio, somente atributos pml* são mutáveis.
+
+[atributos_mutaveis]
+humano = ["pmlCpf"]
+nao_humano = ["pmlNaoHumanoTipo"]
+
+[nao_humano]
+# Valores aceitos em pmlNaoHumanoTipo.
+tipos = ["bot", "impressora", "servico", "outro"]

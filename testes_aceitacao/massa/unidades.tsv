@@ -1,0 +1,11 @@
+ramo	nome	cod	pml_nome_orgao
+direta	CULTURA	cult	Secretaria Municipal de Cultura
+direta	PARQUES	park	Secretaria Municipal de Parques
+direta	TRANSPORTES	tran	Secretaria Municipal de Transportes
+indireta	HABITACAO	habi	Companhia de Habitação
+indireta	SANEAMENTO	sane	Autarquia de Saneamento
+indireta	PREVIDENCIA	prev	Instituto de Previdência
+preposto	TABELIONATO	tabe	Tabelionato de Notas
+preposto	REGISTRO	regi	Registro de Imóveis
+terceirizada	LIMPEZA	limp	Empresa de Limpeza e Conservação
+terceirizada	VIGILANCIA	vigi	Empresa de Vigilância

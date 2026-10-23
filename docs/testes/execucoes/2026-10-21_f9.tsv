@@ -1,0 +1,41 @@
+execucao	id	metodo	rota	esperado	obtido	request_id	ms	resultado	audita	escreveu	nota
+2026-10-21T15:09:53Z	AT-F9-01.padrao	POST	/identidade/humanos/fagundes.varela/redefinir-senha	200	200	b4dc300fd0dc4e008d5ec154e9676a85	89	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-02.tam8	POST	/identidade/humanos/fagundes.varela/redefinir-senha	200	200	9ceaf49b64e1434a86bdfebec25bf419	85	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-02.tam20	POST	/identidade/humanos/fagundes.varela/redefinir-senha	200	200	952ea03828524bcc83eb1d1b19d22f31	82	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-02.tam64	POST	/identidade/humanos/fagundes.varela/redefinir-senha	200	200	917369b7a1b5469faa11a771d063db6c	103	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-03.ralph.emerson	POST	/identidade/humanos/ralph.emerson/redefinir-senha	200	200	d6928b47cebb4d8cbb6e199d0e35dc39	86	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-03.mikhail.lermontov	POST	/identidade/humanos/mikhail.lermontov/redefinir-senha	200	200	2f5d998dfa474ff0a36ca4db80b5bda9	84	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-03.ivan.gontcharov	POST	/identidade/humanos/ivan.gontcharov/redefinir-senha	200	200	f200e083e9b144338602f496b4c4f65e	84	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-04.nhu.bot.cult	POST	/identidade/naohumanos/nhu.bot.cult/redefinir-senha	200	200	3c4a6c12a0ad47658985793b2ff6b35d	76	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-04.nhu.bot.habi	POST	/identidade/naohumanos/nhu.bot.habi/redefinir-senha	200	200	8cbb84e86a9740bb9980cf45fe6f364f	82	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-04.nhu.bot.tabe	POST	/identidade/naohumanos/nhu.bot.tabe/redefinir-senha	200	200	4a0d1953d03b4098a088a0155dc4107d	85	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-04.nhu.bot.limp	POST	/identidade/naohumanos/nhu.bot.limp/redefinir-senha	200	200	7cb664c9925d4bc1b1637c98aebe986d	79	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-05.bloquear	POST	/identidade/humanos/fagundes.varela/bloquear	200	200	7d80ee154cb14ba982316a3c909bfc36	51	OK	sim	BLOCK_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-05.bloqueada	POST	/identidade/humanos/fagundes.varela/redefinir-senha	200	200	0f7822bf15d248e1a70f6a7be5a1b27d	79	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-05.desbloquear	POST	/identidade/humanos/fagundes.varela/desbloquear	200	200	b07d225975d94a6d9dd983b827c1a0d7	54	OK	sim	UNBLOCK_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-05.get	GET	/identidade/humanos/fagundes.varela	200	200	e9bb76a3554149b19d4209dc6619fc71	24	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-06.tam7	POST	/identidade/humanos/fagundes.varela/redefinir-senha	422	422	441fd87459ba4460adf82ebd5b242e69	6	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-06.tam65	POST	/identidade/humanos/fagundes.varela/redefinir-senha	422	422	e62f9185a83046abba5dbce1d4a2eb14	4	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-06.sem-motivo	POST	/identidade/humanos/fagundes.varela/redefinir-senha	422	422	fcbfeeb32f3a435eaa816b1334d7145d	3	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-06.motivo-curto	POST	/identidade/naohumanos/nhu.bot.cult/redefinir-senha	422	422	9b8ee2571c1d42749e72bb851d4e67da	4	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-06.ativar-tam7	POST	/identidade/humanos/fagundes.varela/ativar	422	422	26cde220e8154f67b245fcdd18c65add	5	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-06.ativar-tam65	POST	/identidade/naohumanos/nhu.bot.cult/ativar	422	422	87d67f63d8114499bd1a6a43734cb69e	5	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-07.inexistente	POST	/identidade/humanos/ninguem.aqui/redefinir-senha	404	404	7ae1353f46f3468ca0be48e874221db3	51	OK	sim	-	
+2026-10-21T15:09:53Z	AT-F9-07.tipo-trocado	POST	/identidade/naohumanos/fagundes.varela/redefinir-senha	404	404	6e057ffa31cb410eb79b69b88c03cb1e	59	OK	sim	-	
+2026-10-21T15:09:53Z	AT-F9-07.tipo-trocado2	POST	/identidade/humanos/nhu.bot.cult/redefinir-senha	404	404	d2991ea46e5c49b9bfc04e4d46fb48a2	52	OK	sim	-	
+2026-10-21T15:09:53Z	AT-F9-08.humano.criar	POST	/identidade/humanos	201	201	5d80ebd4fdff408ab580e89905ab0e6e	62	OK	sim	CREATE_HUMANO	
+2026-10-21T15:09:53Z	AT-F9-08.naohumano.criar	POST	/identidade/naohumanos	201	201	65e522e9ce564632a4b43e79f6a331ba	61	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T15:09:53Z	AT-F9-08.humano.redefinir-inoperante	POST	/identidade/humanos/franklin.tavora/redefinir-senha	409	409	68d643160bc94acc9207a10c49fd48bb	49	OK	sim	-	
+2026-10-21T15:09:53Z	AT-F9-08.naohumano.redefinir-inoperante	POST	/identidade/naohumanos/nhu.outro.teste/redefinir-senha	409	409	dea1a70817a246408a97d77cbd0852ba	52	OK	sim	-	
+2026-10-21T15:09:53Z	AT-F9-08.humano.ativar	POST	/identidade/humanos/franklin.tavora/ativar	200	200	b9e6645aed7c4f02bd5022a4f075d806	89	OK	sim	ATIVAR_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-08.naohumano.ativar	POST	/identidade/naohumanos/nhu.outro.teste/ativar	200	200	87bd0e682dbc42d7ae0b1ac3d1b153c8	94	OK	sim	ATIVAR_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-08.humano.redefinir	POST	/identidade/humanos/franklin.tavora/redefinir-senha	200	200	c8577d4c109349c6a6f13afe298083b6	81	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-08.naohumano.redefinir	POST	/identidade/naohumanos/nhu.outro.teste/redefinir-senha	200	200	d8d7f41345b74ab989e5ee0de753fe52	80	OK	sim	REDEFINIR_SENHA	
+2026-10-21T15:09:53Z	AT-F9-08.franklin.tavora.destituir	POST	/identidade/humanos/franklin.tavora/destituir	200	200	f912b2d1698c4644b9fdaf5327a9ff23	61	OK	sim	DESTITUIR_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-08.franklin.tavora.remover	DELETE	/identidade/humanos/franklin.tavora?motivo=inclusao+indevida	204	204	0a52bf89a4e344f2998779208fe603b9	53	OK	sim	DELETE_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-08.franklin.tavora.get	GET	/identidade/humanos/franklin.tavora	404	404	9b8c6beb650048e2909f07cb3ab46108	21	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-08.nhu.outro.teste.destituir	POST	/identidade/naohumanos/nhu.outro.teste/destituir	200	200	be8c64cbe36c462785c7c68e5e22bab8	66	OK	sim	DESTITUIR_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-08.nhu.outro.teste.remover	DELETE	/identidade/naohumanos/nhu.outro.teste?motivo=inclusao+indevida	204	204	72cc89998b194acf93d812b042cfb052	58	OK	sim	DELETE_IDENTIDADE	
+2026-10-21T15:09:53Z	AT-F9-08.nhu.outro.teste.get	GET	/identidade/naohumanos/nhu.outro.teste	404	404	fcc6ea5aefcd49ba98b41d043e824b73	23	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-09	-	senhas não vazam (16 senhas verificadas)	0 no log e 0 na auditoria	0 no log e 0 na auditoria	-	0	OK	nao	-	
+2026-10-21T15:09:53Z	AT-F9-10	-	auditoria: REDEFINIR_SENHA com motivo/tamanho; troca só em humanos	14 linhas (9 com troca, 5 sem)	14 linhas (9 com troca, 5 sem, 14 com motivo e tamanho)	-	0	OK	nao	-	

@@ -1,0 +1,28 @@
+# Nada de segredo, log ou lixo de desenvolvimento entra na imagem.
+.git
+.gitignore
+.gitattributes
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.vscode
+app_backup
+
+# Segredos e dados do host: vêm por .env e por volumes
+.env
+.env.*
+segredo_cliente_api.txt
+logs
+*.db
+*.log
+
+# Não são necessários para executar
+docs
+tests
+testes_aceitacao
+scripts
+README.md
+docker-compose.yml
+Dockerfile

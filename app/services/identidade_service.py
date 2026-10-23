@@ -1,595 +1,337 @@
-﻿"""
-Service responsável pelas outras 2 operações que ficaram sob minha
-responsabilidade: Criar Pessoa e Alterar Pessoa, para os 4 subtipos que
-existem dentro de cada unidade da Direta (Estagio, Carreira, Comissionados,
-NaoHumanos).
-
-Conforme o documento da API:
-  - Criar sempre cria a pessoa dentro da árvore Inoperantes (bloqueada).
-    (A ativação / passagem para Operativos não está descrita no documento
-    e não faz parte destas 2 funções — assumi que é feita por outro fluxo.
-    Vale confirmar isso com o time.)
-  - Alterar só é permitido em pessoas que já estão na árvore Operativos.
-
-Sem endpoint de DELETE físico: quando alguém deixa de ser operante, o
-esperado é mover para o mesmo caminho dentro de Inoperantes (espelho),
-não apagar do AD.
 """
+Identidades: consultar, listar, criar, alterar, bloquear/desbloquear e
+remover, para humanos e não humanos nos quatro ramos. O ciclo de vida (destituir, ativar,
+transferir) está em identidade_ciclo.py.
 
-from ldap3 import MODIFY_REPLACE, SUBTREE
-from ldap3.core.exceptions import LDAPException
+Onde a identidade fica:
+  humano da Direta:  OU=<Categoria>,OU=<UNIDADE>,OU=Direta,OU=Humanos,OU=<árvore>,<PML>
+  demais humanos:    OU=<UNIDADE>,OU=<ramo>,OU=Humanos,OU=<árvore>,<PML>
+  não humano:        OU=<UNIDADE>,OU=<ramo>,OU=NaoHumanos,OU=<árvore>,<PML>
+
+Humano x não humano: o lado da árvore (Humanos/NaoHumanos) em que o DN está.
+"""
+from dataclasses import dataclass, replace
+from functools import partial
+from typing import Optional
+
 from fastapi import HTTPException
+from ldap3 import MODIFY_REPLACE, SUBTREE
+from ldap3.utils.conv import escape_filter_chars
 
+from app.audit_service import Acao, executar_auditado
+from app.core import atributos as at
+from app.core.arvore import (
+    Arvore, Categoria, Ramo, TipoIdentidade,
+    dn_container, dn_ramo, dn_tipo, dn_unidade, local_da_identidade, ou_interna, rdn_cn,
+)
 from app.core.config import settings
-from app.core.ldap_connection import get_connection
-from app.core.logging_config import logger
-from app.core.generators import gerar_login, gerar_senha
-from app.schemas.estrutura import RamoOU
-from app.schemas.identidade import TipoPessoa, PessoaCreate, PessoaUpdate, PessoaOut, PessoaCriadaOut
-from app.services.ad_service import _registrar_atividade
-from app.services.estrutura_service import _dn_unidade, _unidade_existe
+from app.core.contexto import Contexto
+from app.core.erros_ad import tratar_erros
+from app.core.ldap_connection import buscar, conexao
+from app.core.raiz import mascarar_dn
+from app.core.regras import regras
+from app.schemas.identidade import HumanoCreate, IdentidadeListOut, IdentidadeOut, NaoHumanoCreate
+from app.services.base_ad import alterar_uac, gravar_pml, reverter, unidade_existe
 
-UAC_NORMAL_ATIVO = 512
-UAC_NORMAL_DESABILITADA = 514
-
-UAC_PASSWD_NOTREQD = 32
-UAC_ATIVO_SEM_SENHA = UAC_NORMAL_ATIVO | UAC_PASSWD_NOTREQD              # 544
-UAC_DESABILITADA_SEM_SENHA = UAC_NORMAL_DESABILITADA | UAC_PASSWD_NOTREQD
-
-def _dn_subcontainer(arvore: str, unidade: str, tipo: TipoPessoa) -> str:
-    """DN do subcontainer de tipo dentro de uma unidade da Direta."""
-    dn_unidade = _dn_unidade(arvore, RamoOU.DIRETA, unidade)
-    return f"OU={tipo.value},{dn_unidade}"
-
-
-def _gerar_login_e_nome(dados: PessoaCreate) -> tuple[str, str]:
-    if dados.tipo == TipoPessoa.NAO_HUMANO:
-        login = f"nhu.{dados.nao_humano_categoria.lower()}.{dados.nao_humano_identificador.lower()}"
-        nome = f"{dados.nao_humano_categoria}{dados.nao_humano_identificador}".lower()
-    else:
-        login = gerar_login(dados.primeiro_nome, dados.ultimo_nome)
-        nome = f"{dados.primeiro_nome} {dados.ultimo_nome}"
-    return login, nome
-
-
-def criar_pessoa(dados: PessoaCreate, ip_address: str = None, user_agent: str = None,
-                  operator: str = "system") -> PessoaCriadaOut:
-    """
-    Cria uma identidade (humana ou não) dentro do subcontainer de tipo,
-    na unidade indicada. É criada já em Inoperantes, bloqueada.
-    """
-    dados.validar_por_tipo()
-
-    conn = get_connection()
-    try:
-        dn_unidade_op = _dn_unidade("Operativos", RamoOU.DIRETA, dados.unidade)
-        if not _unidade_existe(conn, dn_unidade_op):
-            raise HTTPException(
-                status_code=422,
-                detail=f"Unidade '{dados.unidade}' não existe em Operativos/Direta. Crie a OU primeiro.",
-            )
-
-        login, nome = _gerar_login_e_nome(dados)
-
-        # Login precisa ser único no domínio inteiro, não só na unidade
-        conn.search(search_base=settings.AD_PML_BASE, search_filter=f"(sAMAccountName={login})",
-                    search_scope=SUBTREE)
-        if conn.entries:
-            raise HTTPException(status_code=409, detail=f"Login '{login}' já existe no AD")
-
-        dn_pai = _dn_subcontainer("Operativos", dados.unidade, dados.tipo)
-        dn_pessoa = f"CN={nome},{dn_pai}"
-
-        senha_gerada = None
-        if dados.tipo == TipoPessoa.NAO_HUMANO:
-            atributos = {
-                "objectClass": ["top", "person", "organizationalPerson", "user"],
-                "cn": nome,
-                "sAMAccountName": login,
-                "userPrincipalName": f"{login}@{settings.AD_DOMAIN}",
-                "userAccountControl": UAC_DESABILITADA_SEM_SENHA,
-                "pmlNaoHumanoTipo": dados.nao_humano_tipo or "",
-            }
-        else:
-            atributos = {
-                "objectClass": ["top", "person", "organizationalPerson", "user"],
-                "cn": nome,
-                "sAMAccountName": login,
-                "userPrincipalName": f"{login}@{settings.AD_DOMAIN}",
-                "givenName": dados.primeiro_nome,
-                "sn": dados.ultimo_nome,
-                "displayName": nome,
-                "userAccountControl": UAC_DESABILITADA_SEM_SENHA,
-            }
-            if dados.cargo:
-                atributos["title"] = dados.cargo
-            if dados.email:
-                atributos["mail"] = dados.email
-
-        ok = conn.add(dn_pessoa, attributes=atributos)
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao criar identidade: {conn.result}")
-
-        if dados.tipo != TipoPessoa.NAO_HUMANO:
-            senha_gerada = gerar_senha(8)
-            conn.extend.microsoft.modify_password(dn_pessoa, senha_gerada)
-        # Fica bloqueada (UAC_NORMAL_DESABILITADA) mesmo após criação, conforme documento.
-
-        _registrar_atividade(
-            operator=operator,
-            action="CREATE_PESSOA",
-            target_user=login,
-            details={
-                "tipo": dados.tipo.value,
-                "unidade": dados.unidade,
-                "cpf": dados.cpf,
-                "cargo": dados.cargo,
-            },
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return PessoaCriadaOut(
-            login=login,
-            nome=nome,
-            tipo=dados.tipo,
-            unidade=dados.unidade,
-            ativo=False,
-            distinguished_name=dn_pessoa,
-            cargo=dados.cargo,
-            email=dados.email,
-            senha_gerada=senha_gerada,
-        )
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em criar_pessoa (unidade={dados.unidade}, tipo={dados.tipo}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em criar_pessoa (unidade={dados.unidade}, tipo={dados.tipo}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
-
-
-def alterar_pessoa(login: str, dados: PessoaUpdate, ip_address: str = None, user_agent: str = None,
-                    operator: str = "system") -> PessoaOut:
-    """
-    Altera os atributos mutáveis de uma identidade. Só é permitido se a
-    pessoa estiver atualmente dentro da árvore Operativos.
-    """
-    conn = get_connection()
-    try:
-        conn.search(search_base=settings.AD_PML_BASE, search_filter=f"(sAMAccountName={login})",
-                    search_scope=SUBTREE,
-                    attributes=["cn", "sAMAccountName", "mail", "title", "userAccountControl", "distinguishedName"])
-        if not conn.entries:
-            raise HTTPException(status_code=404, detail="Identidade não encontrada no AD")
-
-        entry = conn.entries[0]
-        dn = str(entry.entry_dn)
-
-        if "OU=Operativos" not in dn:
-            raise HTTPException(
-                status_code=409,
-                detail="Não é possível alterar identidades fora da árvore Operativos",
-            )
-
-        mudancas = {}
-        if dados.cargo is not None:
-            mudancas["title"] = [(MODIFY_REPLACE, [dados.cargo])]
-        if dados.email is not None:
-            mudancas["mail"] = [(MODIFY_REPLACE, [dados.email])]
-        if dados.telefone is not None:
-            mudancas["telephoneNumber"] = [(MODIFY_REPLACE, [dados.telefone])]
-        if dados.nao_humano_tipo is not None:
-            mudancas["pmlNaoHumanoTipo"] = [(MODIFY_REPLACE, [dados.nao_humano_tipo])]
-
-        if mudancas:
-            ok = conn.modify(dn, mudancas)
-            if not ok:
-                raise HTTPException(status_code=500, detail=f"Falha ao alterar identidade: {conn.result}")
-
-        uac = int(entry.userAccountControl.value) if entry.userAccountControl.value else UAC_NORMAL_ATIVO
-        ativo = not (uac & 2)
-
-        # Deduz tipo e unidade a partir do próprio DN (OU=<tipo>,OU=<unidade>,OU=Direta,...)
-        partes = dn.split(",")
-        tipo_str = partes[1].replace("OU=", "") if len(partes) > 1 else None
-        unidade_str = partes[2].replace("OU=", "") if len(partes) > 2 else None
-
-        _registrar_atividade(
-            operator=operator,
-            action="UPDATE_PESSOA",
-            target_user=login,
-            details={"campos_alterados": dados.model_dump(exclude_unset=True)},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return PessoaOut(
-            login=login,
-            nome=str(entry.cn.value),
-            tipo=TipoPessoa(tipo_str) if tipo_str in TipoPessoa._value2member_map_ else TipoPessoa.CARREIRA,
-            unidade=unidade_str or "",
-            ativo=ativo,
-            distinguished_name=dn,
-            cargo=str(entry.title.value) if entry.title.value else None,
-            email=str(entry.mail.value) if entry.mail.value else None,
-        )
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em alterar_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em alterar_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
-
-
-def remover_pessoa(login: str, ip_address: str = None, user_agent: str = None, operator: str = "system") -> None:
-    """
-    Remove fisicamente uma identidade do AD. Só é permitido se a pessoa
-    já estiver na árvore Inoperantes (ninguém é apagado direto de
-    Operativos — primeiro sai de lá, depois, se realmente for o caso,
-    pode ser removida de vez).
-    """
-    conn = get_connection()
-    try:
-        conn.search(search_base=settings.AD_PML_BASE, search_filter=f"(sAMAccountName={login})",
-                    search_scope=SUBTREE, attributes=["distinguishedName"])
-        if not conn.entries:
-            raise HTTPException(status_code=404, detail="Identidade não encontrada no AD")
-
-        dn = str(conn.entries[0].entry_dn)
-
-        if "OU=Inoperantes" not in dn:
-            raise HTTPException(
-                status_code=409,
-                detail="Só é possível remover fisicamente identidades que estejam na árvore Inoperantes",
-            )
-
-        ok = conn.delete(dn)
-        if not ok:
-            raise HTTPException(status_code=500, detail=f"Falha ao remover identidade: {conn.result}")
-
-        _registrar_atividade(
-            operator=operator,
-            action="DELETE_PESSOA",
-            target_user=login,
-            details={"dn": dn},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em remover_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em remover_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
+FILTRO_PESSOA = "(&(objectCategory=person)(objectClass=user))"
+ATRIBUTOS = ["sAMAccountName", "cn", "userAccountControl", *at.PML_IDENTIDADE]
 
 
 # =============================================================================
-# Helpers de ramo (Operativos / Inoperantes)
+# A conta lida do AD
 # =============================================================================
 
-RAMAIS_ESPELHAVEIS = ("OPERATIVOS", "INOPERANTES")
-RAMAIS_CONHECIDOS = ("OPERATIVOS", "INOPERANTES", "DESINCORPORADOS")
+@dataclass(frozen=True)
+class Conta:
+    dn: str
+    login: str
+    nome: str
+    tipo: TipoIdentidade
+    arvore: Arvore
+    ramo: Ramo
+    unidade: str
+    categoria: Optional[Categoria]
+    uac: int
+    pml: dict[str, str]
+
+    @property
+    def bloqueada(self) -> bool:
+        return at.bloqueada(self.uac)
+
+    def container_em(self, arvore: Arvore) -> str:
+        """DN da OU onde esta conta ficaria na árvore indicada (mesma unidade e categoria)."""
+        return dn_container(arvore, self.ramo, self.unidade, self.categoria, self.tipo)
+
+    def para_out(self, avisos: Optional[list[str]] = None) -> IdentidadeOut:
+        return IdentidadeOut(
+            login=self.login, nome=self.nome, tipo=self.tipo, ramo=self.ramo, unidade=self.unidade,
+            categoria=self.categoria, arvore=self.arvore, bloqueada=self.bloqueada,
+            distinguished_name=self.dn, atributos_pml=self.pml, avisos=avisos or [],
+        )
 
 
-def _ramo_do_dn(dn: str) -> tuple[str | None, int | None]:
-    """
-    Dado um DN, retorna (nome_do_ramo, indice_no_DN).
-    Ex: 'CN=Joao Silva,OU=Estagio,OU=FAZENDA,OU=Direta,OU=Operativos,OU=PML,...'
-        → ('OPERATIVOS', 4)
-    Aceita OU= e CN=. Retorna (None, None) se não achar.
-    """
-    partes = [p.strip() for p in dn.split(",")]
-    for i, parte in enumerate(partes):
-        upper = parte.upper()
-        if upper.startswith("OU=") or upper.startswith("CN="):
-            nome = upper.split("=", 1)[1]
-            if nome in RAMAIS_CONHECIDOS:
-                return nome, i
-    return None, None
+def _montar(entrada: dict) -> Optional[Conta]:
+    attrs = entrada.get("attributes", {})
+    login = at.texto(attrs, "sAMAccountName")
+    local = local_da_identidade(entrada["dn"])
+    if not login or not local:
+        return None
+    return Conta(
+        dn=entrada["dn"],
+        login=login,
+        nome=at.texto(attrs, "cn") or entrada["dn"].split(",", 1)[0][3:],
+        tipo=local.tipo,
+        arvore=local.arvore, ramo=local.ramo, unidade=local.unidade, categoria=local.categoria,
+        uac=at.uac_de(attrs),
+        pml={k: v for k in at.PML_IDENTIDADE if (v := at.texto(attrs, k))},
+    )
 
 
-def _calcular_dn_espelhado(dn_atual: str, novo_ramo: str) -> str:
-    """
-    Devolve o DN com o ramo trocado, preservando o resto do caminho.
-    """
-    ramo_atual, idx = _ramo_do_dn(dn_atual)
-    if ramo_atual is None:
+def buscar_conta(conn, login: str) -> Optional[Conta]:
+    achadas = buscar(
+        conn, settings.AD_PML_BASE,
+        f"(&(objectCategory=person)(objectClass=user)(sAMAccountName={escape_filter_chars(login)}))",
+        SUBTREE, ATRIBUTOS,
+    )
+    return next((c for c in map(_montar, achadas) if c), None)
+
+
+def exigir(conn, login: str, tipo: TipoIdentidade) -> Conta:
+    c = buscar_conta(conn, login)
+    if not c or c.tipo != tipo:
+        raise HTTPException(status_code=404, detail="Identidade não encontrada no AD")
+    return c
+
+
+def exigir_operativos(c: Conta) -> None:
+    if c.arvore is not Arvore.OPERATIVOS:
         raise HTTPException(
             status_code=409,
-            detail=f"Não foi possível identificar o ramo da pessoa no DN: {dn_atual}",
+            detail=f"A identidade está em {c.arvore.ou}; esta operação só vale em Operativos",
         )
 
-    novo_ramo = novo_ramo.upper()
-    if novo_ramo not in RAMAIS_ESPELHAVEIS:
+
+# =============================================================================
+# Consultar e listar
+# =============================================================================
+
+@tratar_erros
+def consultar(login: str, tipo: TipoIdentidade) -> IdentidadeOut:
+    with conexao() as conn:
+        return exigir(conn, login, tipo).para_out()
+
+
+@tratar_erros
+def listar(tipo: TipoIdentidade, arvore: Arvore, ramo: Optional[Ramo], unidade: Optional[str],
+           categoria: Optional[Categoria], bloqueada: Optional[bool],
+           limite: int, deslocamento: int) -> IdentidadeListOut:
+    if unidade and not ramo:
+        raise HTTPException(status_code=422, detail="O filtro 'unidade' exige 'ramo'")
+    if categoria and ramo not in (None, Ramo.DIRETA):
+        raise HTTPException(status_code=422, detail="categoria só existe em unidades da Direta")
+    base = dn_tipo(arvore, tipo)
+    if ramo:
+        base = dn_ramo(arvore, ramo, tipo)
+    if unidade:
+        base = dn_unidade(arvore, ramo, unidade.strip().upper(), tipo)
+
+    with conexao() as conn:
+        encontradas = [_montar(e) for e in buscar(conn, base, FILTRO_PESSOA, SUBTREE, ATRIBUTOS)]
+    itens = sorted(
+        (c for c in encontradas
+         if c and c.tipo == tipo
+         and (categoria is None or c.categoria == categoria)
+         and (bloqueada is None or c.bloqueada == bloqueada)),
+        key=lambda c: c.login,
+    )
+    return IdentidadeListOut(
+        total=len(itens), limite=limite, deslocamento=deslocamento,
+        items=[c.para_out() for c in itens[deslocamento:deslocamento + limite]],
+    )
+
+
+# =============================================================================
+# Criar: nasce em Inoperantes, bloqueada e sem senha utilizável
+# =============================================================================
+
+def _criar(dados, tipo: TipoIdentidade, ctx: Contexto) -> IdentidadeOut:
+    nao_humano = tipo is TipoIdentidade.NAO_HUMANO
+    return executar_auditado(
+        ctx, Acao.CRIAR_NAO_HUMANO if nao_humano else Acao.CRIAR_HUMANO, dados.login,
+        {"ramo": dados.ramo.ou, "unidade": dados.unidade,
+         "categoria": ou_interna(dados.ramo, tipo, None if nao_humano else dados.categoria),
+         "cpf": None if nao_humano else dados.cpf,
+         "tipo": dados.pml_nao_humano_tipo if nao_humano else None},
+        lambda: _executar_criar(dados, tipo),
+    )
+
+
+def _executar_criar(dados, tipo: TipoIdentidade) -> tuple[IdentidadeOut, dict]:
+    ramo = dados.ramo
+    nao_humano = tipo is TipoIdentidade.NAO_HUMANO
+    if nao_humano and dados.pml_nao_humano_tipo not in regras().tipos_nao_humano:
         raise HTTPException(
             status_code=422,
-            detail=f"Ramo '{novo_ramo}' não é espelhável. Use OPERATIVOS ou INOPERANTES.",
+            detail=f"pml_nao_humano_tipo inválido; valores aceitos: {', '.join(regras().tipos_nao_humano)}",
         )
 
-    if ramo_atual == novo_ramo:
-        return dn_atual
-
-    partes = [p.strip() for p in dn_atual.split(",")]
-    prefixo = partes[idx].split("=", 1)[0]
-    partes[idx] = f"{prefixo}={novo_ramo}"
-    return ",".join(partes)
-
-
-def _buscar_dn_e_entry(conn, login: str):
-    conn.search(
-        search_base=settings.AD_PML_BASE,
-        search_filter=f"(sAMAccountName={login})",
-        search_scope=SUBTREE,
-        attributes=["cn", "sAMAccountName", "mail", "title", "userAccountControl", "info"],  # ← +info
-    )
-    if not conn.entries:
-        raise HTTPException(status_code=404, detail="Pessoa não encontrada no AD")
-    entry = conn.entries[0]
-    return str(entry.entry_dn), entry
-
-
-def _entry_to_pessoa_out(entry, dn: str) -> PessoaOut:
-    """Monta o PessoaOut a partir de uma entry do LDAP."""
-    uac = int(entry.userAccountControl.value) if entry.userAccountControl.value else UAC_NORMAL_ATIVO
-    ativo = not (uac & 2)
-
-    partes = dn.split(",")
-    tipo_str = None
-    unidade_str = None
-    if len(partes) > 1 and "=" in partes[1]:
-        tipo_str = partes[1].split("=", 1)[1]
-    if len(partes) > 2 and "=" in partes[2]:
-        unidade_str = partes[2].split("=", 1)[1]
-
-    return PessoaOut(
-        login=str(entry.sAMAccountName.value),
-        nome=str(entry.cn.value),
-        tipo=TipoPessoa(tipo_str) if tipo_str in TipoPessoa._value2member_map_ else TipoPessoa.CARREIRA,
-        unidade=unidade_str or "",
-        ativo=ativo,
-        distinguished_name=dn,
-        cargo=str(entry.title.value) if entry.title.value else None,
-        email=str(entry.mail.value) if entry.mail.value else None,
-    )
-
-
-# =============================================================================
-# Mover Pessoa (genérico)
-# =============================================================================
-
-def mover_pessoa(
-    login: str,
-    destino: str,
-    ip_address: str = None,
-    user_agent: str = None,
-    operator: str = "system",
-) -> PessoaOut:
-    """
-    Move uma pessoa para outro local no AD.
-
-    'destino' aceita 2 formas:
-      - Ramo espelhável: 'OPERATIVOS' | 'INOPERANTES'
-        → troca só o ramo, preservando o caminho interno
-      - DN completo do novo pai
-        → move diretamente (ex: trocar FAZENDA por EDUCACAO dentro de Direta)
-    """
-    conn = get_connection()
-    try:
-        dn_atual, entry = _buscar_dn_e_entry(conn, login)
-        rdn = dn_atual.split(",", 1)[0]  # ex: "CN=Joao Silva"
-        ramo_atual, _ = _ramo_do_dn(dn_atual)
-
-        destino_limpo = destino.strip()
-        destino_upper = destino_limpo.upper()
-
-        if destino_upper in RAMAIS_ESPELHAVEIS:
-            if ramo_atual == "DESINCORPORADOS":
-                # Pessoa está "flat" em Desincorporados. Precisa reconstruir o
-                # caminho original a partir do DN salvo em 'info' quando foi
-                # desincorporada.
-                dn_original = _ler_dn_salvo(entry)
-                if not dn_original:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            "Pessoa em Desincorporados sem DN original salvo em 'info'. "
-                            "Informe o DN completo do novo pai no campo 'destino'."
-                        ),
-                    )
-                novo_dn_completo = _calcular_dn_espelhado(dn_original, destino_upper)
-                novo_parent_dn = novo_dn_completo.split(",", 1)[1]
-            else:
-                novo_dn_completo = _calcular_dn_espelhado(dn_atual, destino_upper)
-                novo_parent_dn = novo_dn_completo.split(",", 1)[1]
-
-        elif destino_upper == "DESINCORPORADOS":
-            # Salva o DN atual em 'info' ANTES de mover, porque o destino é
-            # "flat" e perderíamos o caminho original. Na volta, usamos esse
-            # valor para reconstruir onde a pessoa estava.
-            conn.modify(dn_atual, {"info": [(MODIFY_REPLACE, [dn_atual])]})
-            if conn.result["result"] != 0:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Falha ao salvar DN original em 'info': {conn.result}",
-                )
-            novo_parent_dn = f"OU=Desincorporados,{settings.AD_PML_BASE}"
-        else:
-            novo_parent_dn = destino.strip()
-
-        conn.modify_dn(dn_atual, rdn, new_superior=novo_parent_dn)
-        if conn.result["result"] != 0:
+    nome = dados.nome if nao_humano else dados.nome_completo
+    categoria = None if nao_humano else dados.categoria
+    interna = ou_interna(ramo, tipo, categoria)
+    avisos: list[str] = []
+    with conexao() as conn:
+        if not unidade_existe(conn, dn_unidade(Arvore.INOPERANTES, ramo, dados.unidade, tipo)):
             raise HTTPException(
-                status_code=500,
-                detail=f"Falha ao mover pessoa: {conn.result}",
+                status_code=404,
+                detail=f"Unidade '{dados.unidade}' não existe em Inoperantes/{tipo.ou}/{ramo.ou}. Crie a unidade primeiro.",
+            )
+        container = dn_container(Arvore.INOPERANTES, ramo, dados.unidade, categoria, tipo)
+        if interna and not unidade_existe(conn, container):
+            raise HTTPException(status_code=409, detail=f"OU interna ausente no AD: {interna}")
+        if buscar_conta(conn, dados.login):
+            raise HTTPException(status_code=409, detail=f"Login '{dados.login}' já existe na estrutura")
+
+        dn = f"{rdn_cn(nome)},{container}"
+        conn.add(dn, attributes={
+            "objectClass": ["top", "person", "organizationalPerson", "user"],
+            "cn": nome,
+            "sAMAccountName": dados.login,
+            "userPrincipalName": f"{dados.login}@{settings.AD_UPN_SUFIXO}",
+            "displayName": nome,
+            "userAccountControl": at.UAC_NOVA_CONTA,
+        })
+
+        pml = ({at.PML_NAO_HUMANO_TIPO: dados.pml_nao_humano_tipo} if nao_humano
+               else ({at.PML_CPF: dados.cpf} if dados.cpf else {}))
+        gravado = False
+        if pml:
+            try:
+                gravado = gravar_pml(conn, dn, pml, avisos)
+            except Exception:
+                # a conta não pode ficar sem os atributos exigidos
+                reverter(partial(conn.delete, dn),
+                         f"conta criada e não removida após falha ao gravar pml* ({mascarar_dn(dn)}); "
+                         "remover manualmente")
+                raise
+
+    saida = Conta(
+        dn=dn, login=dados.login, nome=nome, tipo=tipo, arvore=Arvore.INOPERANTES, ramo=ramo,
+        unidade=dados.unidade, categoria=categoria, uac=at.UAC_NOVA_CONTA,
+        pml=pml if gravado else {},
+    ).para_out(avisos)
+    return saida, {"pml_gravado": gravado or not pml}
+
+
+@tratar_erros
+def criar_humano(dados: HumanoCreate, ctx: Contexto) -> IdentidadeOut:
+    return _criar(dados, TipoIdentidade.HUMANO, ctx)
+
+
+@tratar_erros
+def criar_nao_humano(dados: NaoHumanoCreate, ctx: Contexto) -> IdentidadeOut:
+    return _criar(dados, TipoIdentidade.NAO_HUMANO, ctx)
+
+
+# =============================================================================
+# Alterar: só atributos do arquivo de regras, só em Operativos
+# =============================================================================
+
+@tratar_erros
+def alterar(login: str, tipo: TipoIdentidade, campos: dict[str, Optional[str]], ctx: Contexto) -> IdentidadeOut:
+    return executar_auditado(
+        ctx, Acao.ALTERAR_IDENTIDADE, login, {"campos": sorted(campos)},
+        lambda: _executar_alterar(login, tipo, campos),
+    )
+
+
+def _executar_alterar(login: str, tipo: TipoIdentidade, campos: dict[str, Optional[str]]) -> tuple[IdentidadeOut, dict]:
+    nao_humano = tipo is TipoIdentidade.NAO_HUMANO
+    permitidos = {a.lower(): a for a in regras().mutaveis(nao_humano)}
+    invalidos = sorted(k for k in campos if k.lower() not in permitidos)
+    if not campos or invalidos:
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Atributos não alteráveis: {', '.join(invalidos)}. " if invalidos else "Nenhum atributo informado. ")
+                   + f"Alteráveis: {', '.join(permitidos.values()) or 'nenhum'}",
+        )
+    mudancas = {permitidos[k.lower()]: v for k, v in campos.items()}
+    for k, v in mudancas.items():
+        if v is not None and len(v) > 255:
+            raise HTTPException(status_code=422, detail=f"{k} excede 255 caracteres")
+    if nao_humano and at.PML_NAO_HUMANO_TIPO in mudancas:
+        if mudancas[at.PML_NAO_HUMANO_TIPO] not in regras().tipos_nao_humano:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{at.PML_NAO_HUMANO_TIPO} inválido; valores aceitos: {', '.join(regras().tipos_nao_humano)}",
             )
 
-        dn_novo = f"{rdn},{novo_parent_dn}"
+    avisos: list[str] = []
+    with conexao() as conn:
+        c = exigir(conn, login, tipo)
+        exigir_operativos(c)
+        pml = {k: v for k, v in mudancas.items() if k.lower().startswith("pml")}
+        comuns = {k: v for k, v in mudancas.items() if k not in pml}
+        if comuns:
+            conn.modify(c.dn, {k: [(MODIFY_REPLACE, [v] if v is not None else [])] for k, v in comuns.items()})
+        gravado = gravar_pml(conn, c.dn, pml, avisos) if pml else False
 
-        _registrar_atividade(
-            operator=operator,
-            action="MOVE_PESSOA",
-            target_user=login,
-            details={
-                "dn_anterior": dn_atual,
-                "dn_novo": dn_novo,
-                "destino_informado": destino,
-            },
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return _entry_to_pessoa_out(entry, dn_novo)
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em mover_pessoa (login={login}, destino={destino}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em mover_pessoa (login={login}, destino={destino}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
+    if gravado:
+        c = replace(c, pml={k: v for k, v in {**c.pml, **pml}.items() if v is not None})
+    return c.para_out(avisos), {"pml_gravado": gravado or not pml}
 
 
 # =============================================================================
-# Bloquear / Desbloquear Pessoa
+# Bloquear / desbloquear no lugar: não move a conta
 # =============================================================================
 
-def bloquear_pessoa(
-    login: str,
-    ip_address: str = None,
-    user_agent: str = None,
-    operator: str = "system",
-) -> PessoaOut:
-    """
-    Bloqueia/inativa uma pessoa:
-      1. Move para o ramo INOPERANTES (espelhado)
-      2. userAccountControl = 514
-    Idempotente: se já estiver em INOPERANTES, só reaplica o UAC.
-    """
-    conn = get_connection()
-    try:
-        dn_atual, _ = _buscar_dn_e_entry(conn, login)
-        ramo_atual, _ = _ramo_do_dn(dn_atual)
+def _alternar_bloqueio(login: str, tipo: TipoIdentidade, bloquear: bool, ctx: Contexto) -> IdentidadeOut:
+    return executar_auditado(
+        ctx, Acao.BLOQUEAR_IDENTIDADE if bloquear else Acao.DESBLOQUEAR_IDENTIDADE, login, {},
+        lambda: _executar_bloqueio(login, tipo, bloquear),
+    )
 
-        if ramo_atual == "DESINCORPORADOS":
+
+def _executar_bloqueio(login: str, tipo: TipoIdentidade, bloquear: bool) -> tuple[IdentidadeOut, dict]:
+    with conexao() as conn:
+        c = exigir(conn, login, tipo)
+        exigir_operativos(c)
+        if bloquear == c.bloqueada:
             raise HTTPException(
                 status_code=409,
-                detail="Pessoa em Desincorporados não pode ser bloqueada por este fluxo.",
+                detail=f"A identidade já está {'bloqueada' if bloquear else 'desbloqueada'}",
             )
-
-        if ramo_atual != "INOPERANTES":
-            rdn = dn_atual.split(",", 1)[0]
-            novo_dn = _calcular_dn_espelhado(dn_atual, "INOPERANTES")
-            novo_parent = novo_dn.split(",", 1)[1]
-            conn.modify_dn(dn_atual, rdn, new_superior=novo_parent)
-            if conn.result["result"] != 0:
-                raise HTTPException(status_code=500, detail=f"Falha ao mover: {conn.result}")
-
-        dn_novo, _ = _buscar_dn_e_entry(conn, login)
-        conn.modify(dn_novo, {"userAccountControl": [(MODIFY_REPLACE, [UAC_DESABILITADA_SEM_SENHA])]})
-        if conn.result["result"] != 0:
-            raise HTTPException(status_code=500, detail=f"Falha ao desabilitar: {conn.result}")
-
-        _, entry = _buscar_dn_e_entry(conn, login)
-
-        _registrar_atividade(
-            operator=operator,
-            action="BLOCK_PESSOA",
-            target_user=login,
-            details={"dn_anterior": dn_atual, "dn_atual": dn_novo},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return _entry_to_pessoa_out(entry, dn_novo)
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em bloquear_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em bloquear_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
+        novo = at.bloquear(c.uac) if bloquear else at.desbloquear(c.uac)
+        alterar_uac(conn, c.dn, novo)
+    return replace(c, uac=novo).para_out(), {"uac_anterior": c.uac, "uac_novo": novo}
 
 
-def desbloquear_pessoa(
-    login: str,
-    ip_address: str = None,
-    user_agent: str = None,
-    operator: str = "system",
-) -> PessoaOut:
-    """
-    Desbloqueia/reativa uma pessoa:
-      1. Move para o ramo OPERATIVOS (espelhado)
-      2. userAccountControl = 512
-    """
-    conn = get_connection()
-    try:
-        dn_atual, _ = _buscar_dn_e_entry(conn, login)
-        ramo_atual, _ = _ramo_do_dn(dn_atual)
+@tratar_erros
+def bloquear(login: str, tipo: TipoIdentidade, ctx: Contexto) -> IdentidadeOut:
+    return _alternar_bloqueio(login, tipo, True, ctx)
 
-        if ramo_atual == "DESINCORPORADOS":
+
+@tratar_erros
+def desbloquear(login: str, tipo: TipoIdentidade, ctx: Contexto) -> IdentidadeOut:
+    return _alternar_bloqueio(login, tipo, False, ctx)
+
+
+# =============================================================================
+# Remover fisicamente: só inclusão indevida ou duplicada, só em Inoperantes
+# =============================================================================
+
+@tratar_erros
+def remover(login: str, tipo: TipoIdentidade, motivo: str, ctx: Contexto) -> None:
+    executar_auditado(ctx, Acao.REMOVER_IDENTIDADE, login, {"motivo": motivo},
+                      lambda: _executar_remover(login, tipo))
+
+
+def _executar_remover(login: str, tipo: TipoIdentidade) -> tuple[None, dict]:
+    with conexao() as conn:
+        c = exigir(conn, login, tipo)
+        if c.arvore is not Arvore.INOPERANTES:
             raise HTTPException(
                 status_code=409,
-                detail="Pessoa em Desincorporados não pode ser desbloqueada por este fluxo.",
+                detail=f"Só é possível remover fisicamente identidades em Inoperantes (está em {c.arvore.ou})",
             )
-
-        if ramo_atual != "OPERATIVOS":
-            rdn = dn_atual.split(",", 1)[0]
-            novo_dn = _calcular_dn_espelhado(dn_atual, "OPERATIVOS")
-            novo_parent = novo_dn.split(",", 1)[1]
-            conn.modify_dn(dn_atual, rdn, new_superior=novo_parent)
-            if conn.result["result"] != 0:
-                raise HTTPException(status_code=500, detail=f"Falha ao mover: {conn.result}")
-
-        dn_novo, _ = _buscar_dn_e_entry(conn, login)
-        conn.modify(dn_novo, {"userAccountControl": [(MODIFY_REPLACE, [UAC_ATIVO_SEM_SENHA])]})
-        if conn.result["result"] != 0:
-            raise HTTPException(status_code=500, detail=f"Falha ao habilitar: {conn.result}")
-
-        _, entry = _buscar_dn_e_entry(conn, login)
-
-        _registrar_atividade(
-            operator=operator,
-            action="UNBLOCK_PESSOA",
-            target_user=login,
-            details={"dn_anterior": dn_atual, "dn_atual": dn_novo},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        return _entry_to_pessoa_out(entry, dn_novo)
-    except HTTPException:
-        raise
-    except LDAPException as e:
-        logger.error(f"Erro LDAP em desbloquear_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=503, detail="Erro de comunicação com o Active Directory") from e
-    except Exception as e:
-        logger.error(f"Erro inesperado em desbloquear_pessoa (login={login}): {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a solicitação") from e
-    finally:
-        conn.unbind()
-
-def _ler_dn_salvo(entry) -> str | None:
-    """Lê o DN original salvo no atributo 'info' (quando foi desincorporado)."""
-    try:
-        if hasattr(entry, "info") and entry.info.value:
-            return str(entry.info.value)
-    except Exception:
-        pass
-    return None
+        conn.delete(c.dn)
+    return None, {"dn": c.dn}

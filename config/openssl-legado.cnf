@@ -1,0 +1,15 @@
+# OpenSSL mínimo para o DC legado: TLS 1.0 e nível de segurança 0.
+# NÃO é usado por padrão. Só se, dentro da imagem Debian (openssl.cnf com MinProtocol = TLSv1.2), o handshake com o
+# DC falhar: descomente OPENSSL_CONF no serviço "api" do docker-compose.yml. Substitui o openssl.cnf do sistema só
+# naquele serviço; a API só fala TLS com o AD.
+openssl_conf = openssl_init
+
+[openssl_init]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+MinProtocol = TLSv1
+CipherString = ALL:@SECLEVEL=0

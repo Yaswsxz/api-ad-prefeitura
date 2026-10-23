@@ -1,0 +1,26 @@
+execucao	id	metodo	rota	esperado	obtido	request_id	ms	resultado	audita	escreveu	nota
+2026-10-21T13:56:01Z	AT-F6-01.sem-token.estrutura.unidades.direta	GET	/estrutura/unidades/direta	401	401	28bf8aeaee1f49f1b909f93817ec1e84	2	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.token-invalido.estrutura.unidades.direta	GET	/estrutura/unidades/direta	401	401	434640710bc84cf9b0a345a0b96ba344	3	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.sem-token.identidade.humanos	GET	/identidade/humanos	401	401	03ef6c49a00a4c64899b3f58eb35a5bd	2	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.token-invalido.identidade.humanos	GET	/identidade/humanos	401	401	e8f3eaf41c9142e692ec54e48dfc5073	2	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.sem-token.identidade.naohumanos	GET	/identidade/naohumanos	401	401	6d9327cad6314925b313803f1b461c2b	3	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.token-invalido.identidade.naohumanos	GET	/identidade/naohumanos	401	401	ba81e71cd9b24c679f11f3ee44210725	2	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.sem-token.auditoria.login-history	GET	/auditoria/login-history	401	401	cc12a497a3934b6389982ac06ba70101	3	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-01.token-invalido.auditoria.login-history	GET	/auditoria/login-history	401	401	da42d71f614e40d0916509b69299a2d6	3	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-02.404	GET	/rota/que/nao/existe	404	404	d6c84ad751c740aebb03386edaed8695	2	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-02.405	DELETE	/health	405	405	53eb70f7ddc34479b7c345d1ea6597df	2	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-03	POST	/identidade/humanos	422	422	fd355d6562324e59afce5da982b4a9fe	3	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-04	-	toda chamada registrada tem X-Request-ID	0 sem id	0 sem id	-	0	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-05.valido	GET	/health	200	200	acao-teste-0001	3	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-05.invalido	-	id inválido é trocado por outro	id gerado pela API	984bcf931cf945a68c7ef3b3e2885e94	-	0	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-06.409	POST	/estrutura/unidades/direta	409	409	b3c42346c70d46d48a6bf8cdd21835ee	55	OK	sim	-	
+2026-10-21T13:56:01Z	AT-F6-06.404	GET	/estrutura/unidades/direta/NAOEXISTE	404	404	9ed6013ba5444c17bd25ee4cd45c9364	28	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-06.422	POST	/estrutura/unidades/direta	422	422	b996b64022574ffd9c7affa5f8bd85c3	4	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.1	POST	/auth/token	401	401	dfa4144bf7f945af8d4a11645708f337	360	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.2	POST	/auth/token	401	401	bb0164d09bf5463ab1c57c108d8ea581	363	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.3	POST	/auth/token	401	401	7f36b57a111a41a8be51a2855f5d0ec7	370	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.4	POST	/auth/token	401	401	768e01e9d54f486091802347f3607bc9	349	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.5	POST	/auth/token	401	401	b38c198fce2d4a7ba516da305ec120ec	353	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.6	POST	/auth/token	429	429	da35248247ff49838d4a4908d93a43a2	19	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-07.real	POST	/auth/token	200	200	c53abfaf26924661820cec4eccbc6127	373	OK	nao	-	
+2026-10-21T13:56:01Z	AT-F6-08	GET	/openapi.json	200	200	780b675098aa4222bd767208b529f8e7	6	OK	nao	-	

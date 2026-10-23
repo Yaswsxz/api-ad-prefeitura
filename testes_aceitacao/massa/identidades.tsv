@@ -1,0 +1,73 @@
+tipo	ramo	unidade	categoria	login	nome	tipo_nh	cpf
+humano	direta	CULTURA	estagio	fagundes.varela	Fagundes Varela	-	00000000000
+humano	direta	CULTURA	estagio	jose.alencar	José de Alencar	-	-
+humano	direta	CULTURA	carreira	castro.alves	Castro Alves	-	00000000000
+humano	direta	CULTURA	carreira	goncalves.dias	Gonçalves Dias	-	-
+humano	direta	CULTURA	comissionado	alvares.azevedo	Álvares de Azevedo	-	00000000000
+humano	direta	CULTURA	comissionado	casimiro.abreu	Casimiro de Abreu	-	-
+humano	direta	PARQUES	estagio	aluisio.azevedo	Aluísio Azevedo	-	00000000000
+humano	direta	PARQUES	estagio	raul.pompeia	Raul Pompéia	-	-
+humano	direta	PARQUES	carreira	joaquim.macedo	Joaquim Manuel de Macedo	-	00000000000
+humano	direta	PARQUES	carreira	bernardo.guimaraes	Bernardo Guimarães	-	-
+humano	direta	PARQUES	comissionado	manuel.almeida	Manuel Antônio de Almeida	-	00000000000
+humano	direta	PARQUES	comissionado	gregorio.matos	Gregório de Matos	-	-
+humano	direta	TRANSPORTES	estagio	tomas.gonzaga	Tomás Antônio Gonzaga	-	00000000000
+humano	direta	TRANSPORTES	estagio	cruz.sousa	Cruz e Sousa	-	-
+humano	direta	TRANSPORTES	carreira	edgar.poe	Edgar Allan Poe	-	00000000000
+humano	direta	TRANSPORTES	carreira	walt.whitman	Walt Whitman	-	-
+humano	direta	TRANSPORTES	comissionado	herman.melville	Herman Melville	-	00000000000
+humano	direta	TRANSPORTES	comissionado	nathaniel.hawthorne	Nathaniel Hawthorne	-	-
+humano	indireta	HABITACAO	-	ralph.emerson	Ralph Waldo Emerson	-	00000000000
+humano	indireta	HABITACAO	-	henry.thoreau	Henry David Thoreau	-	-
+humano	indireta	SANEAMENTO	-	emily.dickinson	Emily Dickinson	-	00000000000
+humano	indireta	SANEAMENTO	-	washington.irving	Washington Irving	-	-
+humano	indireta	PREVIDENCIA	-	james.cooper	James Fenimore Cooper	-	00000000000
+humano	indireta	PREVIDENCIA	-	alexandre.puchkin	Alexandre Púchkin	-	-
+humano	preposto	TABELIONATO	-	mikhail.lermontov	Mikhail Lermontov	-	00000000000
+humano	preposto	TABELIONATO	-	nikolai.gogol	Nikolai Gógol	-	-
+humano	preposto	REGISTRO	-	ivan.turgueniev	Ivan Turguêniev	-	00000000000
+humano	preposto	REGISTRO	-	fiodor.dostoievski	Fiódor Dostoiévski	-	-
+humano	terceirizada	LIMPEZA	-	ivan.gontcharov	Ivan Gontcharov	-	00000000000
+humano	terceirizada	LIMPEZA	-	nikolai.nekrassov	Nikolai Nekrassov	-	-
+humano	terceirizada	VIGILANCIA	-	alexandre.herzen	Alexandre Herzen	-	00000000000
+humano	terceirizada	VIGILANCIA	-	nikolai.leskov	Nikolai Leskov	-	-
+naohumano	direta	CULTURA	-	nhu.bot.cult	botcult	bot	-
+naohumano	direta	CULTURA	-	nhu.impressora.cult	impressoracult	impressora	-
+naohumano	direta	CULTURA	-	nhu.servico.cult	servicocult	servico	-
+naohumano	direta	CULTURA	-	nhu.outro.cult	outrocult	outro	-
+naohumano	direta	PARQUES	-	nhu.bot.park	botpark	bot	-
+naohumano	direta	PARQUES	-	nhu.impressora.park	impressorapark	impressora	-
+naohumano	direta	PARQUES	-	nhu.servico.park	servicopark	servico	-
+naohumano	direta	PARQUES	-	nhu.outro.park	outropark	outro	-
+naohumano	direta	TRANSPORTES	-	nhu.bot.tran	bottran	bot	-
+naohumano	direta	TRANSPORTES	-	nhu.impressora.tran	impressoratran	impressora	-
+naohumano	direta	TRANSPORTES	-	nhu.servico.tran	servicotran	servico	-
+naohumano	direta	TRANSPORTES	-	nhu.outro.tran	outrotran	outro	-
+naohumano	indireta	HABITACAO	-	nhu.bot.habi	bothabi	bot	-
+naohumano	indireta	HABITACAO	-	nhu.impressora.habi	impressorahabi	impressora	-
+naohumano	indireta	HABITACAO	-	nhu.servico.habi	servicohabi	servico	-
+naohumano	indireta	HABITACAO	-	nhu.outro.habi	outrohabi	outro	-
+naohumano	indireta	SANEAMENTO	-	nhu.bot.sane	botsane	bot	-
+naohumano	indireta	SANEAMENTO	-	nhu.impressora.sane	impressorasane	impressora	-
+naohumano	indireta	SANEAMENTO	-	nhu.servico.sane	servicosane	servico	-
+naohumano	indireta	SANEAMENTO	-	nhu.outro.sane	outrosane	outro	-
+naohumano	indireta	PREVIDENCIA	-	nhu.bot.prev	botprev	bot	-
+naohumano	indireta	PREVIDENCIA	-	nhu.impressora.prev	impressoraprev	impressora	-
+naohumano	indireta	PREVIDENCIA	-	nhu.servico.prev	servicoprev	servico	-
+naohumano	indireta	PREVIDENCIA	-	nhu.outro.prev	outroprev	outro	-
+naohumano	preposto	TABELIONATO	-	nhu.bot.tabe	bottabe	bot	-
+naohumano	preposto	TABELIONATO	-	nhu.impressora.tabe	impressoratabe	impressora	-
+naohumano	preposto	TABELIONATO	-	nhu.servico.tabe	servicotabe	servico	-
+naohumano	preposto	TABELIONATO	-	nhu.outro.tabe	outrotabe	outro	-
+naohumano	preposto	REGISTRO	-	nhu.bot.regi	botregi	bot	-
+naohumano	preposto	REGISTRO	-	nhu.impressora.regi	impressoraregi	impressora	-
+naohumano	preposto	REGISTRO	-	nhu.servico.regi	servicoregi	servico	-
+naohumano	preposto	REGISTRO	-	nhu.outro.regi	outroregi	outro	-
+naohumano	terceirizada	LIMPEZA	-	nhu.bot.limp	botlimp	bot	-
+naohumano	terceirizada	LIMPEZA	-	nhu.impressora.limp	impressoralimp	impressora	-
+naohumano	terceirizada	LIMPEZA	-	nhu.servico.limp	servicolimp	servico	-
+naohumano	terceirizada	LIMPEZA	-	nhu.outro.limp	outrolimp	outro	-
+naohumano	terceirizada	VIGILANCIA	-	nhu.bot.vigi	botvigi	bot	-
+naohumano	terceirizada	VIGILANCIA	-	nhu.impressora.vigi	impressoravigi	impressora	-
+naohumano	terceirizada	VIGILANCIA	-	nhu.servico.vigi	servicovigi	servico	-
+naohumano	terceirizada	VIGILANCIA	-	nhu.outro.vigi	outrovigi	outro	-

@@ -1,12 +1,13 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
 .env
 .vscode/
 *.db
-ad_audit.db
 resultado.txt
 app_backup/
-api_ad.log
-
-api_ad.log
+segredo_cliente_api.txt
+docs/testes/execucoes/.hdr.*
+# Logs e trilha de auditoria: tudo vive em logs/ e nada é apagado
+logs/

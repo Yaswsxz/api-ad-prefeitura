@@ -1,45 +1,48 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-from fastapi import HTTPException, status, Depends
-from fastapi.security import OAuth2PasswordBearer
+
 from app.core.config import settings
+from app.core.segredo import gerar_hash_segredo, verificar_segredo  # noqa: F401 (reexportados)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="usuarios/login")
+_bearer = HTTPBearer(auto_error=False)
 
 
-def criar_token_acesso(data: dict, expires_delta: Optional[timedelta] = None):
+def criar_token_acesso(subject: str, expires_delta: Optional[timedelta] = None) -> str:
+    """Token JWT assinado com o identificador do cliente em `sub`."""
+    agora = datetime.now(timezone.utc)
+    expira = agora + (expires_delta or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES))
+    return jwt.encode(
+        {"sub": subject, "iat": agora, "exp": expira},
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+async def get_current_user(
+    credenciais: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+) -> str:
     """
-    Gera um token JWT assinado, contendo os dados informados (normalmente {"sub": login}).
+    Dependência que protege as rotas: exige `Authorization: Bearer <token>`
+    emitido por POST /auth/token e devolve o `sub` (identificador do cliente).
     """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
-    return encoded_jwt
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
-    """
-    Dependência do FastAPI usada para proteger rotas. Extrai e valida o token JWT
-    enviado no header Authorization, retornando o login do usuário autenticado.
-    Usar assim numa rota: def minha_rota(usuario_atual: str = Depends(get_current_user)):
-    """
-    credentials_exception = HTTPException(
+    nao_autorizado = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciais inválidas ou token expirado",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if credenciais is None:
+        raise nao_autorizado
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        return username
+        payload = jwt.decode(
+            credenciais.credentials, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        )
     except JWTError:
-        raise credentials_exception
+        raise nao_autorizado
+    sub = payload.get("sub")
+    if not sub:
+        raise nao_autorizado
+    return str(sub)

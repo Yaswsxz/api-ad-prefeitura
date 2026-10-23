@@ -1,0 +1,9 @@
+# Scripts bash e massa em TSV precisam de LF (o checkout no Windows converteria para CRLF e quebraria o bash).
+*.sh text eol=lf
+*.tsv text eol=lf
+*.pem text eol=lf
+.env.example text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+*.yml text eol=lf
+*.cnf text eol=lf

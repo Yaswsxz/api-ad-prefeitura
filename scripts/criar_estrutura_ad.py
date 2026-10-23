@@ -30,7 +30,7 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 from app.core.ldap_connection import get_connection
-from app.schemas.estrutura import RamoOU
+from app.core.arvore import Ramo
 
 
 # =============================================================================
@@ -39,12 +39,12 @@ from app.schemas.estrutura import RamoOU
 
 ARVORES_ESPELHADAS = ["Operativos", "Inoperantes"]
 ARVORES_EXTRA = ["Desincorporados"]
-RAMOS = [RamoOU.DIRETA, RamoOU.INDIRETA, RamoOU.TERCEIRIZADAS, RamoOU.PREPOSTOS]
+RAMOS = [Ramo.DIRETA, Ramo.INDIRETA, Ramo.TERCEIRIZADA, Ramo.PREPOSTO]
 
 SUBCONTAINERS_DIRETA = ["Estagio", "Carreira", "Comissionados", "NaoHumanos"]
 
 UNIDADES = {
-    RamoOU.DIRETA: [
+    Ramo.DIRETA: [
         ("FAZENDA",        "Secretaria Municipal da Fazenda"),
         ("EDUCACAO",       "Secretaria Municipal de Educação"),
         ("PLANEJAMENTO",   "Secretaria Municipal de Planejamento, Orçamento e Tecnologia"),
@@ -52,7 +52,7 @@ UNIDADES = {
         ("OUVIDORIA",      "Ouvidoria-Geral do Município"),
         ("SAUDE",          "Secretaria Municipal de Saúde"),
     ],
-    RamoOU.INDIRETA: [
+    Ramo.INDIRETA: [
         ("CODEL",     "Companhia de Desenvolvimento de Londrina"),
         ("CMTU",      "Companhia Municipal de Trânsito e Urbanização"),
         ("COHAB",     "Companhia de Habitação de Londrina"),
@@ -63,8 +63,8 @@ UNIDADES = {
         ("AMS",       "Autarquia Municipal de Saúde"),
         ("SERCONTEL", "Sercomtel S.A."),
     ],
-    RamoOU.TERCEIRIZADAS: [],
-    RamoOU.PREPOSTOS: [
+    Ramo.TERCEIRIZADA: [],
+    Ramo.PREPOSTO: [
         ("CARTORIO SEGUNDO", "Cartório do Segundo Ofício"),
     ],
 }
@@ -189,7 +189,7 @@ def garantir_esqueleto(conn, dry_run: bool) -> int:
 
         parent = f"OU={arvore},{settings.AD_PML_BASE}"
         for ramo in RAMOS:
-            if _garantir_ou(conn, parent, ramo.value, dry_run, prefixo_log="    "):
+            if _garantir_ou(conn, parent, ramo.ou, dry_run, prefixo_log="    "):
                 criados += 1
 
     return criados
@@ -209,12 +209,12 @@ def garantir_unidades(conn, dry_run: bool) -> dict:
 
     for ramo, unidades in UNIDADES.items():
         if not unidades:
-            print(f"\n▶ {ramo.value}: (nenhuma unidade cadastrada ainda)")
+            print(f"\n▶ {ramo.ou}: (nenhuma unidade cadastrada ainda)")
             continue
 
-        print(f"\n▶ {ramo.value} ({len(unidades)} unidades)")
-        parent_op = f"OU={ramo.value},OU=Operativos,{settings.AD_PML_BASE}"
-        parent_inop = f"OU={ramo.value},OU=Inoperantes,{settings.AD_PML_BASE}"
+        print(f"\n▶ {ramo.ou} ({len(unidades)} unidades)")
+        parent_op = f"OU={ramo.ou},OU=Operativos,{settings.AD_PML_BASE}"
+        parent_inop = f"OU={ramo.ou},OU=Inoperantes,{settings.AD_PML_BASE}"
 
         for nome, descricao in unidades:
             existe_op = _existe(conn, parent_op, nome)
@@ -222,7 +222,7 @@ def garantir_unidades(conn, dry_run: bool) -> dict:
 
             if existe_op and existe_inop:
                 print(f"    [OK]   {nome}")
-                resultado["existentes"].append(f"{ramo.value}/{nome}")
+                resultado["existentes"].append(f"{ramo.ou}/{nome}")
                 continue
 
             if dry_run:
@@ -247,19 +247,19 @@ def garantir_unidades(conn, dry_run: bool) -> dict:
                     print(f"    [NEW]  OU={nome},{parent}")
 
                     # Só Direta tem os 4 subcontainers
-                    if ramo == RamoOU.DIRETA:
+                    if ramo == Ramo.DIRETA:
                         for sub in SUBCONTAINERS_DIRETA:
                             if not _existe(conn, dn_unidade, sub):
                                 _criar_container(conn, dn_unidade, sub)
                                 print(f"           └─ CN={sub}")
 
-                resultado["criadas"].append(f"{ramo.value}/{nome}")
+                resultado["criadas"].append(f"{ramo.ou}/{nome}")
             except HTTPException as e:
                 print(f"    [ERR]  {nome}: {e.detail}")
-                resultado["erros"].append(f"{ramo.value}/{nome}: {e.detail}")
+                resultado["erros"].append(f"{ramo.ou}/{nome}: {e.detail}")
             except Exception as e:
                 print(f"    [ERR]  {nome}: {e}")
-                resultado["erros"].append(f"{ramo.value}/{nome}: {e}")
+                resultado["erros"].append(f"{ramo.ou}/{nome}: {e}")
 
     return resultado
 

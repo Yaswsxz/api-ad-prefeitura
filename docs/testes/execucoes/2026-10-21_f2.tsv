@@ -1,0 +1,264 @@
+execucao	id	metodo	rota	esperado	obtido	request_id	ms	resultado	audita	escreveu	nota
+2026-10-21T13:23:01Z	AT-F2-01.machado.assis	POST	/identidade/humanos	201	409	b455edd356c043d9a122ae7c3919e474	68	SUBSTITUIDO	sim	-	recusado pelo AD (UPN já usado fora do PML): 1ª tentativa, antes do modo descoberta
+2026-10-21T13:28:33Z	AT-F2-01.machado.assis	POST	/identidade/humanos	201	409	99df8efd0613431fbd98cf0f35cfe2cb	58	SUBSTITUIDO	sim	-	recusado pelo AD (login/UPN já usado fora do PML): trocar na massa
+2026-10-21T13:28:33Z	AT-F2-01.jose.alencar	POST	/identidade/humanos	201	201	5059ade7b0214621974c4001e08be883	83	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.castro.alves	POST	/identidade/humanos	201	201	b7ac39479ff542b6b1da2323f26b6a59	71	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.goncalves.dias	POST	/identidade/humanos	201	201	d2d9390040b54475b45e267b631e56b4	70	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.alvares.azevedo	POST	/identidade/humanos	201	201	04ca1a42117d4ac4b9beb59abb323bd8	70	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.casimiro.abreu	POST	/identidade/humanos	201	201	164f972a13764f2793de59bfe32377af	64	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.aluisio.azevedo	POST	/identidade/humanos	201	201	85d4abac38f9435a9cd986e8e2cf887a	68	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.raul.pompeia	POST	/identidade/humanos	201	201	cdb46106a909459ead4e5e46ad9d0344	81	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.joaquim.macedo	POST	/identidade/humanos	201	201	6776b7a47cc64697974c898ab92b3735	61	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.bernardo.guimaraes	POST	/identidade/humanos	201	201	faaf7bef8cb249cdaa72863018a5c124	64	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.manuel.almeida	POST	/identidade/humanos	201	201	bf4e8ca9abb04a52be22b53c025a94f7	73	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.gregorio.matos	POST	/identidade/humanos	201	201	383e1336997d43c48edab7551b62c43a	64	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.tomas.gonzaga	POST	/identidade/humanos	201	201	e5e417a970bb4cb38f41d66cd8af0ff8	64	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.cruz.sousa	POST	/identidade/humanos	201	201	92ac6c31ce074a7fa1322ddbbd18ff81	81	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.edgar.poe	POST	/identidade/humanos	201	201	202fb6d734d14f79a25b7b13b3abe57e	69	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.walt.whitman	POST	/identidade/humanos	201	201	905040ac45694891bdf54e2f494301e7	72	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.herman.melville	POST	/identidade/humanos	201	201	8a1adba3c5474a29974e23babefbef16	64	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.nathaniel.hawthorne	POST	/identidade/humanos	201	201	ff35f7a2540c4df6802c7e62a23f24a8	67	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.ralph.emerson	POST	/identidade/humanos	201	201	88c62cdde7e348309d55405e779a6643	62	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.henry.thoreau	POST	/identidade/humanos	201	201	63fc492e90b14c81af8c0a6d763de840	54	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.emily.dickinson	POST	/identidade/humanos	201	201	177cf76854344464917b726662eded81	70	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.washington.irving	POST	/identidade/humanos	201	201	763f10ca46a742a897407f7bc5bb0b7d	73	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.james.cooper	POST	/identidade/humanos	201	201	13d6f78f299f47f9bf180493989474c4	68	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.alexandre.puchkin	POST	/identidade/humanos	201	201	0796cb459ba645d4990a06811b3f9e51	64	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.mikhail.lermontov	POST	/identidade/humanos	201	201	94a4228f29bd48c2843532acbb38a5fa	69	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.nikolai.gogol	POST	/identidade/humanos	201	201	f3fdab55678042678f15e54df6655d04	65	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.ivan.turgueniev	POST	/identidade/humanos	201	201	1f2c91eff1db44439c029ff66c8587c0	74	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.fiodor.dostoievski	POST	/identidade/humanos	201	201	69903e3e14c64e87ac630a1c060a0d79	59	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.ivan.gontcharov	POST	/identidade/humanos	201	201	0d776740a80e41619bc4cf489af1f5f5	81	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.nikolai.nekrassov	POST	/identidade/humanos	201	201	9b1ade9d9b604671afdade402ab2496f	63	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.alexandre.herzen	POST	/identidade/humanos	201	201	26a6f09b4cb949cb8200aff67c4beb16	71	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-01.nikolai.leskov	POST	/identidade/humanos	201	201	4a63d00cef3d43c7ad0cc2cbe8751ab2	72	OK	sim	CREATE_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.cult	POST	/identidade/naohumanos	201	201	2eec906a1f884428b7896d21fa861a9d	91	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.cult	POST	/identidade/naohumanos	201	201	eb823e640ec9414999b923fe9237a6ec	63	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.cult	POST	/identidade/naohumanos	201	201	e2d2acd3dfa646db872e8f88b05098c4	63	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.cult	POST	/identidade/naohumanos	201	201	e9e9cdf887c94d4a9b3cef06d2bc1811	65	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.park	POST	/identidade/naohumanos	201	201	5f9bf9d76fcd4208a2c1977054d3c412	64	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.park	POST	/identidade/naohumanos	201	201	6090eb34e55f41e0a54436e425e756e4	65	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.park	POST	/identidade/naohumanos	201	201	9c695228c0b74d06921dbb56e107536f	63	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.park	POST	/identidade/naohumanos	201	201	862bc14afcbe45ab9dfba70b68488947	60	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.tran	POST	/identidade/naohumanos	201	201	9d4411f1e12b45fba3f6b4e89b5861ca	70	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.tran	POST	/identidade/naohumanos	201	201	8a0d474839584aa88a4d44cd34ba2615	64	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.tran	POST	/identidade/naohumanos	201	201	c9daf83141554844a2b726b0afe2f328	63	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.tran	POST	/identidade/naohumanos	201	201	b2070c1d02c14eae9dd7276b38b2e7c4	65	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.habi	POST	/identidade/naohumanos	201	201	64fce782d48a40978a67a654f3d2f5ef	68	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.habi	POST	/identidade/naohumanos	201	201	8c3ace744cc2446896553453b9418fb4	61	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.habi	POST	/identidade/naohumanos	201	201	02d2af99ddbe4a2a929b27e41f25d6a1	57	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.habi	POST	/identidade/naohumanos	201	201	0a53a5f5845f4e9da78108549c883333	59	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.sane	POST	/identidade/naohumanos	201	201	7d2db11141284577a94a0ab7470e13d5	61	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.sane	POST	/identidade/naohumanos	201	201	1e898a89777a497d836c1cd2060f9a1a	63	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.sane	POST	/identidade/naohumanos	201	201	73c7e42e971c4d12a0a104aa8b514f21	58	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.sane	POST	/identidade/naohumanos	201	201	5c15c6047cfe45c7ba8ca70d56e695f5	58	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.prev	POST	/identidade/naohumanos	201	201	eee23c8b380f4811aa08ed152988237d	60	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.prev	POST	/identidade/naohumanos	201	201	6f94bc7ad2034d06b06552386aa4d0a2	64	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.prev	POST	/identidade/naohumanos	201	201	cb499f9ee6f74c77b1547a6173264e66	62	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.prev	POST	/identidade/naohumanos	201	201	cd3cdd56524944e289b2dda512a34a76	59	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.tabe	POST	/identidade/naohumanos	201	201	6808be8e54ff44e5b37a79f6f8ad00b9	69	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.tabe	POST	/identidade/naohumanos	201	201	1a1e25544b44419fb22c0a480cc2649e	60	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.tabe	POST	/identidade/naohumanos	201	201	3aff72b24a184d22b4c8722907e839b0	54	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.tabe	POST	/identidade/naohumanos	201	201	1eb7dce5a49740ffae9e2de4ff6983b3	60	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.regi	POST	/identidade/naohumanos	201	201	1f54e4d329d248c39f083808a9aeaa20	57	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.regi	POST	/identidade/naohumanos	201	201	8f3bb98fa9cf411e857d330dd6e6f829	59	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.regi	POST	/identidade/naohumanos	201	201	3fbe3bd762374c5f88e3d35fa345f166	62	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.regi	POST	/identidade/naohumanos	201	201	dbce86151443421db375905b7d4c975d	60	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.limp	POST	/identidade/naohumanos	201	201	ddc425bb1f5341f586d84883c6846fd1	69	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.limp	POST	/identidade/naohumanos	201	201	8a9bb2107e4547fd91c8969a530e9764	60	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.limp	POST	/identidade/naohumanos	201	201	94c57e4646bf4097a8232921b3d87a7a	58	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.limp	POST	/identidade/naohumanos	201	201	ab59542d715349af85e3849d3609eb5d	56	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.bot.vigi	POST	/identidade/naohumanos	201	201	1cbc934eae55402f91ea73b3b85a2774	62	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.impressora.vigi	POST	/identidade/naohumanos	201	201	647b8ad4334942ab864efaa54e5acac1	72	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.servico.vigi	POST	/identidade/naohumanos	201	201	968a40411ee74fe694d9113977650929	63	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:28:33Z	AT-F2-02.nhu.outro.vigi	POST	/identidade/naohumanos	201	201	1c95ad09d3554faabe5ea23285818762	64	OK	sim	CREATE_NAO_HUMANO	
+2026-10-21T13:33:01Z	AT-F2-01.fagundes.varela	POST	/identidade/humanos	201	201	71127c6a98c041af85f0cfb26d5fc7ed	66	OK	sim	CREATE_HUMANO	
+2026-10-21T13:33:01Z	AT-F2-01.jose.alencar	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.castro.alves	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.goncalves.dias	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.alvares.azevedo	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.casimiro.abreu	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.aluisio.azevedo	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.raul.pompeia	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.joaquim.macedo	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.bernardo.guimaraes	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.manuel.almeida	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.gregorio.matos	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.tomas.gonzaga	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.cruz.sousa	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.edgar.poe	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.walt.whitman	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.herman.melville	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.nathaniel.hawthorne	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.ralph.emerson	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.henry.thoreau	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.emily.dickinson	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.washington.irving	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.james.cooper	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.alexandre.puchkin	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.mikhail.lermontov	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.nikolai.gogol	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.ivan.turgueniev	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.fiodor.dostoievski	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.ivan.gontcharov	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.nikolai.nekrassov	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.alexandre.herzen	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-01.nikolai.leskov	POST	/identidade/humanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.cult	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.cult	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.cult	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.cult	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.park	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.park	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.park	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.park	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.tran	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.tran	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.tran	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.tran	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.habi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.habi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.habi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.habi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.sane	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.sane	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.sane	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.sane	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.prev	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.prev	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.prev	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.prev	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.tabe	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.tabe	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.tabe	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.tabe	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.regi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.regi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.regi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.regi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.limp	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.limp	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.limp	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.limp	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.bot.vigi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.impressora.vigi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.servico.vigi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-02.nhu.outro.vigi	POST	/identidade/naohumanos	-	-	-	0	JA_EXISTIA	nao	-	conta já existia
+2026-10-21T13:33:01Z	AT-F2-03.fagundes.varela	GET	/identidade/humanos/fagundes.varela	200	200	0a84e3c000964dcab45e89d0db9967dc	33	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.jose.alencar	GET	/identidade/humanos/jose.alencar	200	200	07ad3e121a5d40478b40840a9dfbbbd5	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.castro.alves	GET	/identidade/humanos/castro.alves	200	200	797f3f67e52449ecb7e88425ff878c14	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.goncalves.dias	GET	/identidade/humanos/goncalves.dias	200	200	cd49d03c903445ccb3f3db3e1cc6660c	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.alvares.azevedo	GET	/identidade/humanos/alvares.azevedo	200	200	4047cb1f20fa42568f6e0f89d94d6f9a	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.casimiro.abreu	GET	/identidade/humanos/casimiro.abreu	200	200	32d44ca9c07f4854bb3da25b2739094a	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.aluisio.azevedo	GET	/identidade/humanos/aluisio.azevedo	200	200	23da6bfd9d9b44e6a8ffd0076a4c3408	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.raul.pompeia	GET	/identidade/humanos/raul.pompeia	200	200	bc8022b21344490696c82330b33ae68e	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.joaquim.macedo	GET	/identidade/humanos/joaquim.macedo	200	200	0265bffd37bf4b14bc661d8ee9b91b6e	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.bernardo.guimaraes	GET	/identidade/humanos/bernardo.guimaraes	200	200	55e895e99b204760b148ed64ff3bb0d9	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.manuel.almeida	GET	/identidade/humanos/manuel.almeida	200	200	9d6ae1b4035542ba97a6900e3af4a0d9	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.gregorio.matos	GET	/identidade/humanos/gregorio.matos	200	200	41c158b8d77c482b8803483738a59c1c	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.tomas.gonzaga	GET	/identidade/humanos/tomas.gonzaga	200	200	c65c214d1feb4c98b3161368d64db991	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.cruz.sousa	GET	/identidade/humanos/cruz.sousa	200	200	637d69de9c8a4b158be28dd5e924a89b	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.edgar.poe	GET	/identidade/humanos/edgar.poe	200	200	1a8ffb4c869e43e28678b78f4b1dac32	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.walt.whitman	GET	/identidade/humanos/walt.whitman	200	200	149acd187ae048c6ba0dd1d55d3f2704	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.herman.melville	GET	/identidade/humanos/herman.melville	200	200	aa6b80f94c2445b6bda7f08cb803a715	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nathaniel.hawthorne	GET	/identidade/humanos/nathaniel.hawthorne	200	200	1f2559b41e984541a10d46b247526303	26	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.ralph.emerson	GET	/identidade/humanos/ralph.emerson	200	200	c54f702c6a58466daec71f59bb62772a	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.henry.thoreau	GET	/identidade/humanos/henry.thoreau	200	200	07bb87d9c6b043ae850029443e384d98	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.emily.dickinson	GET	/identidade/humanos/emily.dickinson	200	200	9657741a281d4aab83bbbd7c75388dcc	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.washington.irving	GET	/identidade/humanos/washington.irving	200	200	a2b35cab6a32432c8505452870416838	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.james.cooper	GET	/identidade/humanos/james.cooper	200	200	e8b299d5b3314a2bb8616c07e2c8d144	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.alexandre.puchkin	GET	/identidade/humanos/alexandre.puchkin	200	200	716863c1c46a449781201107f0d70a75	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.mikhail.lermontov	GET	/identidade/humanos/mikhail.lermontov	200	200	a8a33f1bb9854f45bc8ea282d3573754	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nikolai.gogol	GET	/identidade/humanos/nikolai.gogol	200	200	03b02b6aa73840c592d497b8ce17875d	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.ivan.turgueniev	GET	/identidade/humanos/ivan.turgueniev	200	200	5fa89b1fec91494f87181328308d0cbb	1036	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.fiodor.dostoievski	GET	/identidade/humanos/fiodor.dostoievski	200	200	90413634388a44ceb15ca08cb646a831	29	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.ivan.gontcharov	GET	/identidade/humanos/ivan.gontcharov	200	200	143e8b8cfada4d1fa73825892f97bc76	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nikolai.nekrassov	GET	/identidade/humanos/nikolai.nekrassov	200	200	594de3e682e54b24be73cd8071784b03	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.alexandre.herzen	GET	/identidade/humanos/alexandre.herzen	200	200	b85eb4346e974dd0a6a56e730bcb8e04	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nikolai.leskov	GET	/identidade/humanos/nikolai.leskov	200	200	1f9838a667614d4498381d7d25c0e4ab	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.cult	GET	/identidade/naohumanos/nhu.bot.cult	200	200	c67a93528a1545e9b542545a1b8a3935	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.cult	GET	/identidade/naohumanos/nhu.impressora.cult	200	200	6a88dada4eb347c599719224e502eb69	17	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.cult	GET	/identidade/naohumanos/nhu.servico.cult	200	200	87cd031d11c24f899cbb0f72e11c2609	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.cult	GET	/identidade/naohumanos/nhu.outro.cult	200	200	fd0a8b2242b74e779f1161463313eb7d	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.park	GET	/identidade/naohumanos/nhu.bot.park	200	200	483348485a49451f80075681c4a67f34	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.park	GET	/identidade/naohumanos/nhu.impressora.park	200	200	71d6551c84624df69e14cc96f96f10c4	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.park	GET	/identidade/naohumanos/nhu.servico.park	200	200	87633d6318874f54b0383928592495a4	28	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.park	GET	/identidade/naohumanos/nhu.outro.park	200	200	6c51b80ec6e149e2a31325aa2e186e47	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.tran	GET	/identidade/naohumanos/nhu.bot.tran	200	200	477ebfa1d6ba4ac8a6949d0530c1a2ce	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.tran	GET	/identidade/naohumanos/nhu.impressora.tran	200	200	f71563849428446b81082e499c498224	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.tran	GET	/identidade/naohumanos/nhu.servico.tran	200	200	f31eb308468f4500a84802c5ffeba87a	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.tran	GET	/identidade/naohumanos/nhu.outro.tran	200	200	ebf02a40df4548e4a7c151f7aa4928cb	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.habi	GET	/identidade/naohumanos/nhu.bot.habi	200	200	cff7d655d99a4177b6e2d502271965f4	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.habi	GET	/identidade/naohumanos/nhu.impressora.habi	200	200	0d822f7410c744f78640c97458e54946	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.habi	GET	/identidade/naohumanos/nhu.servico.habi	200	200	a230612f28f146299a59c95a372c497a	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.habi	GET	/identidade/naohumanos/nhu.outro.habi	200	200	cb770b1d989642d39c978e6c25fa14e5	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.sane	GET	/identidade/naohumanos/nhu.bot.sane	200	200	43fb52d6206048a387a496f6fb85a97f	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.sane	GET	/identidade/naohumanos/nhu.impressora.sane	200	200	d81a4e19b12e46daae9854f48b003a34	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.sane	GET	/identidade/naohumanos/nhu.servico.sane	200	200	dcfce8ef36ad4d0a836ba730006f3c71	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.sane	GET	/identidade/naohumanos/nhu.outro.sane	200	200	a203135e18f440258a48af56fceb9c0f	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.prev	GET	/identidade/naohumanos/nhu.bot.prev	200	200	08fc58882ba745afb1736fa63efbfa24	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.prev	GET	/identidade/naohumanos/nhu.impressora.prev	200	200	a36cf5ee730a4f12b16bbab3f0c57a32	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.prev	GET	/identidade/naohumanos/nhu.servico.prev	200	200	0909afc26d804f469ea7d883ad4b4765	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.prev	GET	/identidade/naohumanos/nhu.outro.prev	200	200	536b5492e03e40ca824498a88158c8bf	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.tabe	GET	/identidade/naohumanos/nhu.bot.tabe	200	200	ad668282a05e41ed91414ef2622c5852	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.tabe	GET	/identidade/naohumanos/nhu.impressora.tabe	200	200	8ecf408d20eb4e34b065d74285c6ce38	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.tabe	GET	/identidade/naohumanos/nhu.servico.tabe	200	200	2c4b5794ebe941a1b67541a015aa36e8	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.tabe	GET	/identidade/naohumanos/nhu.outro.tabe	200	200	ecb8c6395c4c49bf97c623d95292be63	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.regi	GET	/identidade/naohumanos/nhu.bot.regi	200	200	afaa7078d00a44d9bd13b0d9cf1aa803	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.regi	GET	/identidade/naohumanos/nhu.impressora.regi	200	200	81c7d76fdf404b1595f5ab20ff885201	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.regi	GET	/identidade/naohumanos/nhu.servico.regi	200	200	9dc87df0fac248ec9f694f2d96bc6f43	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.regi	GET	/identidade/naohumanos/nhu.outro.regi	200	200	87fab725dc004ca9ba103a6914c5a47e	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.limp	GET	/identidade/naohumanos/nhu.bot.limp	200	200	b9bc3211bf57410594a7c27e335353ba	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.limp	GET	/identidade/naohumanos/nhu.impressora.limp	200	200	111bb931d5494e77bcecb932505cc888	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.limp	GET	/identidade/naohumanos/nhu.servico.limp	200	200	ab1d0328253149dd8773c2947d1026e5	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.limp	GET	/identidade/naohumanos/nhu.outro.limp	200	200	9c29bbde56c2412c9f143faba4594270	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.bot.vigi	GET	/identidade/naohumanos/nhu.bot.vigi	200	200	772b654b1f504562a78323a41a9e0c84	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.impressora.vigi	GET	/identidade/naohumanos/nhu.impressora.vigi	200	200	87d03cc215b24a4d97e6c1de07ad1ddc	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.servico.vigi	GET	/identidade/naohumanos/nhu.servico.vigi	200	200	c8f9c5bf34484c90bf2567cbab880c32	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-03.nhu.outro.vigi	GET	/identidade/naohumanos/nhu.outro.vigi	200	200	97b42e60e26a4ee2bc8f9b6a48304679	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.CULTURA.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&limite=1000	200	200	1a12a74cffff47cd9f74685a71498a57	28	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.CULTURA.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&limite=1000	200	200	b4a0743f447c44d08273f4fd5989d88b	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.CULTURA.estagio	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&categoria=estagio&limite=1000	200	200	930b6aee351d47f5a0786c0f6a8161e7	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.CULTURA.carreira	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&categoria=carreira&limite=1000	200	200	b37d2885fba54d18a445b3bfdeeb51f5	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.CULTURA.comissionado	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&categoria=comissionado&limite=1000	200	200	ce827f6bb63d4a9c9a0d0685ba723de4	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.PARQUES.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=PARQUES&limite=1000	200	200	dea22f8931e94da8b6d6e5fb3cf71b93	27	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.PARQUES.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=direta&unidade=PARQUES&limite=1000	200	200	a629d635aa71446eba75878c68f86daf	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.PARQUES.estagio	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=PARQUES&categoria=estagio&limite=1000	200	200	bb14fe7cba2841d98eb8dfdd66138519	25	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.PARQUES.carreira	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=PARQUES&categoria=carreira&limite=1000	200	200	33fcc3cf7573431eb1ef32570038248e	29	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.PARQUES.comissionado	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=PARQUES&categoria=comissionado&limite=1000	200	200	a7908b99c94745049a751d2c5976d3ba	26	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.TRANSPORTES.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=TRANSPORTES&limite=1000	200	200	358e46cf8c3949c9a0ef6288a6ec240d	38	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.TRANSPORTES.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=direta&unidade=TRANSPORTES&limite=1000	200	200	005d1679f8ab4119b49a73afe89d2828	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.TRANSPORTES.estagio	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=TRANSPORTES&categoria=estagio&limite=1000	200	200	1f68dc8448464e5e9832aa3a6524b8e9	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.TRANSPORTES.carreira	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=TRANSPORTES&categoria=carreira&limite=1000	200	200	61f8f983dd2b431598fcea75f896110f	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-05.TRANSPORTES.comissionado	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=TRANSPORTES&categoria=comissionado&limite=1000	200	200	c2e5efb6b34643b996d23ea0f721b577	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.HABITACAO.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=indireta&unidade=HABITACAO&limite=1000	200	200	634db4a6604648f18eacd063dd2a915b	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.HABITACAO.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=indireta&unidade=HABITACAO&limite=1000	200	200	a900f83a84c94362bc4806b9b00a89e2	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.SANEAMENTO.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=indireta&unidade=SANEAMENTO&limite=1000	200	200	2c0a2c242d4c4a718c153aebaa11eb1e	27	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.SANEAMENTO.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=indireta&unidade=SANEAMENTO&limite=1000	200	200	9b21c5587271468da6de056dee3da7bd	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.PREVIDENCIA.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=indireta&unidade=PREVIDENCIA&limite=1000	200	200	4c6d185f9b0543d7bea7df1e07a8aa0a	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.PREVIDENCIA.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=indireta&unidade=PREVIDENCIA&limite=1000	200	200	30a9b0899f894357ab9c03e9b245de77	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.TABELIONATO.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=preposto&unidade=TABELIONATO&limite=1000	200	200	aed26ba9dd3542bbbc737c6ec25b1de3	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.TABELIONATO.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=preposto&unidade=TABELIONATO&limite=1000	200	200	69958bbdb6004f459c31e5504bde710e	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.REGISTRO.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=preposto&unidade=REGISTRO&limite=1000	200	200	cc995415ec374f078a2d48b287f71783	23	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.REGISTRO.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=preposto&unidade=REGISTRO&limite=1000	200	200	8fa8c147166b4b21a58411de296d0c01	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.LIMPEZA.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=terceirizada&unidade=LIMPEZA&limite=1000	200	200	b6e59ffbb4df46e185dff14f63d065af	21	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.LIMPEZA.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=terceirizada&unidade=LIMPEZA&limite=1000	200	200	2adc7f21db63469db9075d912ab005d6	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.VIGILANCIA.humanos	GET	/identidade/humanos?arvore=inoperantes&ramo=terceirizada&unidade=VIGILANCIA&limite=1000	200	200	b24ca63dc7074e9cb67cbd21b5b412a7	18	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-04.VIGILANCIA.naohumanos	GET	/identidade/naohumanos?arvore=inoperantes&ramo=terceirizada&unidade=VIGILANCIA&limite=1000	200	200	33969d7403e44435a78c3dcfd7cd1ab0	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-06.true	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&bloqueada=true&limite=1000	200	200	2d2bec8e6434478eb5f6e72dc1574507	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-06.false	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&bloqueada=false&limite=1000	200	200	09a7fac77f264304ae2ab7b5c95f424c	24	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-07	GET	/identidade/humanos?arvore=inoperantes&ramo=direta&unidade=CULTURA&limite=2&deslocamento=4	200	200	3fadde9bc40c4107aa0a9ee63bc288bd	22	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-08.humano	POST	/identidade/humanos	409	409	54281c172e604f61816e840c3bbd45c3	57	OK	sim	-	
+2026-10-21T13:33:01Z	AT-F2-08.naohumano	POST	/identidade/naohumanos	409	409	147dd7e4e1474827aab28bfacf7ae18b	55	OK	sim	-	
+2026-10-21T13:33:01Z	AT-F2-09.Jose.Alencar	POST	/identidade/humanos	422	422	582f1eddda354cbf8efa75dde853d77e	3	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-09.jose	POST	/identidade/humanos	422	422	5b1167232728453b9b8e0755503461dd	3	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-09.jose_alencar	POST	/identidade/humanos	422	422	03375e50563a4015a13203b2f29f1037	3	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-10.sem-categoria	POST	/identidade/humanos	422	422	5ac6e67441064736b5285fc2e39d82b9	3	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-10.categoria-fora	POST	/identidade/humanos	422	422	7a9e707785114fb9bfc6a6ad34122a61	3	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-11	POST	/identidade/humanos	404	404	eb1a5a8b63324c949fbd3d2380f1a836	47	OK	sim	-	
+2026-10-21T13:33:01Z	AT-F2-12	POST	/identidade/naohumanos	422	422	e100e369f8ab40f2a99a3a4a693d73b1	30	OK	sim	-	
+2026-10-21T13:33:01Z	AT-F2-13	POST	/identidade/humanos	422	422	bf759fa36e5f4c6d95f9b9e68d1fb589	3	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-14.tipo-trocado-1	GET	/identidade/humanos/nhu.bot.cult	404	404	3f92a8de0ef1442db09749cda3a5bc23	20	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-14.tipo-trocado-2	GET	/identidade/naohumanos/fagundes.varela	404	404	9d7c1542ebd4497f9b681b71fd4d7a98	309	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-14.inexistente	GET	/identidade/humanos/ninguem.aqui	404	404	41be6ffcb3ea430f9bcfade208c06252	19	OK	nao	-	
+2026-10-21T13:33:01Z	AT-F2-15	GET	/identidade/humanos?unidade=CULTURA	422	422	35fde5a7519b4e3ba74659bbd5a3c721	3	OK	nao	-	

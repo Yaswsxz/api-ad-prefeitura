@@ -1,46 +1,7 @@
-﻿from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 from enum import Enum
-
-
-class UsuarioUpdate(BaseModel):
-    cargo: Optional[str] = None
-    tipo: Optional[str] = None
-    email: Optional[str] = None
-    telefone: Optional[str] = None
-
-
-class TrocaSenha(BaseModel):
-    nova_senha: Optional[str] = Field(
-        None, description="Se não informada, uma senha aleatória é gerada"
-    )
-    forcar_troca_no_proximo_login: bool = True
-
-
-class UsuarioOut(BaseModel):
-    login: str
-    nome_completo: str
-    email: Optional[str] = None
-    cargo: Optional[str] = None
-    tipo: Optional[str] = None
-    ativo: bool
-    distinguished_name: str
-
-
-class CampoOrdenacao(str, Enum):
-    """Campos disponíveis para ordenação."""
-    NOME = "nome"
-    LOGIN = "login"
-    EMAIL = "email"
-    CARGO = "cargo"
-    STATUS = "status"
-
-
-class Ordem(str, Enum):
-    """Direção da ordenação."""
-    ASC = "asc"
-    DESC = "desc"
 
 
 class EventoLogin(str, Enum):
@@ -72,5 +33,4 @@ class LoginHistoryOut(BaseModel):
     success: bool
     error_message: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

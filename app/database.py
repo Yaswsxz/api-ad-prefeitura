@@ -1,24 +1,43 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Index
-from sqlalchemy.orm import declarative_base, sessionmaker  # ← MUDANÇA AQUI!
-from datetime import datetime
-import os
+from datetime import datetime, timezone
 
-# URL de conexão com o SQLite (pode vir do .env, mas tem fallback local)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ad_audit.db")
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, create_engine
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+from app.core.caminhos import resolver
+from app.core.config import settings
+
+
+def url_do_banco(url: str) -> URL:
+    """
+    URL do banco de auditoria. SQLite em arquivo é resolvido a partir da raiz do projeto (não do
+    diretório corrente) e o diretório é criado.
+    """
+    u = make_url(url)
+    if u.get_backend_name() == "sqlite" and u.database and u.database != ":memory:":
+        arquivo = resolver(u.database)
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        u = u.set(database=str(arquivo))
+    return u
+
+
+DATABASE_URL = url_do_banco(settings.database_url)
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if DATABASE_URL.get_backend_name() == "sqlite" else {},
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()  # ← AGORA VEM DO sqlalchemy.orm
+Base = declarative_base()
+
+
+def agora() -> datetime:
+    """Instante atual em UTC, sem fuso (é como as colunas de data guardam)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class LoginHistory(Base):
-    """
-    Tabela que registra todas as tentativas de login/logout no sistema.
-    Essencial para auditoria de acessos e segurança (LGPD).
-    """
+    """Tentativas de login/logout (auditoria de acessos e segurança, LGPD)."""
     __tablename__ = "login_history"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -26,21 +45,17 @@ class LoginHistory(Base):
     event_type = Column(String(20), nullable=False)  # 'login' ou 'logout'
     ip_address = Column(String(45))
     user_agent = Column(String(255))
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, default=agora, index=True)
     success = Column(Boolean, default=True)
     error_message = Column(Text, nullable=True)
 
-    # Índices compostos para melhorar performance em consultas frequentes
     __table_args__ = (
         Index('idx_login_username_time', 'username', 'timestamp'),
     )
 
 
 class ActivityHistory(Base):
-    """
-    Tabela que registra todas as ações administrativas realizadas na API.
-    Exemplos: criação, edição, exclusão, troca de senha, habilitação/desabilitação.
-    """
+    """Ações administrativas realizadas na API (criação, alteração, destituição etc.)."""
     __tablename__ = "activity_history"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -50,7 +65,7 @@ class ActivityHistory(Base):
     details = Column(Text, nullable=True)
     ip_address = Column(String(45))
     user_agent = Column(String(255))
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, default=agora, index=True)
     status = Column(String(20), default="SUCCESS")
 
     __table_args__ = (
@@ -59,8 +74,9 @@ class ActivityHistory(Base):
     )
 
 
-# Cria as tabelas no banco de dados
-Base.metadata.create_all(bind=engine)
+def iniciar_banco() -> None:
+    """Cria as tabelas de auditoria que ainda não existem."""
+    Base.metadata.create_all(bind=engine)
 
 
 def get_db():

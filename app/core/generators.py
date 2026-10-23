@@ -1,28 +1,19 @@
-import re
 import secrets
 import string
-import unicodedata
+
+TAMANHO_SENHA_PADRAO = 12
+TAMANHO_SENHA_MIN = 8     # garante folga para as 4 classes de caracteres
+TAMANHO_SENHA_MAX = 64
 
 
-def remover_acentos(texto: str) -> str:
-    nfkd = unicodedata.normalize("NFKD", texto)
-    return "".join(c for c in nfkd if not unicodedata.combining(c))
-
-
-def gerar_login(primeiro_nome: str, ultimo_nome: str) -> str:
-    """Gera login no formato primeiro.ultimo, minúsculo e sem acentos/espaços."""
-    primeiro = remover_acentos(primeiro_nome).strip().lower()
-    ultimo = remover_acentos(ultimo_nome).strip().lower()
-    primeiro = re.sub(r"[^a-z]", "", primeiro)
-    ultimo = re.sub(r"[^a-z]", "", ultimo)
-    return f"{primeiro}.{ultimo}"
-
-
-def gerar_senha(tamanho: int = 8) -> str:
+def gerar_senha(tamanho: int = TAMANHO_SENHA_PADRAO) -> str:
     """
     Gera senha aleatória atendendo aos requisitos padrão de complexidade
     do Active Directory (maiúscula, minúscula, número e símbolo).
+    Usada na ativação e na redefinição de senha de identidades.
     """
+    if not TAMANHO_SENHA_MIN <= tamanho <= TAMANHO_SENHA_MAX:
+        raise ValueError(f"tamanho da senha deve estar entre {TAMANHO_SENHA_MIN} e {TAMANHO_SENHA_MAX}")
     maiusculas = string.ascii_uppercase
     minusculas = string.ascii_lowercase
     numeros = string.digits

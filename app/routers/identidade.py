@@ -1,96 +1,191 @@
-﻿from fastapi import APIRouter, Request, Depends
+from typing import Annotated, Optional
 
-from app.schemas.identidade import PessoaCreate, PessoaUpdate, PessoaOut, PessoaCriadaOut
-from app.services import identidade_service
-from app.core.auth import get_current_user  # ajuste o import conforme o nome real da sua dependência de auth
+from fastapi import APIRouter, Body, Depends, Query, Response
 
-router = APIRouter(prefix="/identidade", tags=["Identidade (Pessoa)"])
+from app.core.arvore import Arvore, Categoria, Ramo, TipoIdentidade
+from app.core.auth import get_current_user
+from app.core.contexto import Contexto, contexto
+from app.schemas.estrutura import AtoUnidade
+from app.schemas.identidade import (
+    AtivacaoOut, AtivarHumano, AtivarNaoHumano, HumanoCreate, IdentidadeListOut, IdentidadeOut,
+    NaoHumanoCreate, RedefinirSenha, SenhaRedefinidaOut, TransferirHumano, TransferirNaoHumano,
+)
+from app.services import identidade_ciclo as ciclo
+from app.services import identidade_service as svc
 
+router = APIRouter(prefix="/identidade", tags=["Identidade"], dependencies=[Depends(get_current_user)])
 
-@router.post("/humanos", response_model=PessoaCriadaOut, status_code=201)
-def criar_pessoa(dados: PessoaCreate, request: Request, current_user: str = Depends(get_current_user)):
-    """
-    Cria uma identidade (Estagio, Carreira, Comissionados ou NaoHumanos)
-    dentro da unidade indicada. É criada em Inoperantes, bloqueada.
-    """
-    return identidade_service.criar_pessoa(
-        dados,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        operator=current_user,
-    )
+Ctx = Annotated[Contexto, Depends(contexto)]
+HUMANO, NAO_HUMANO = TipoIdentidade.HUMANO, TipoIdentidade.NAO_HUMANO
 
 
-@router.patch("/humanos/{login}", response_model=PessoaOut)
-def alterar_pessoa(login: str, dados: PessoaUpdate, request: Request,
-                    current_user: str = Depends(get_current_user)):
-    """Altera os atributos mutáveis de uma identidade (só se estiver em Operativos)."""
-    return identidade_service.alterar_pessoa(
-        login, dados,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        operator=current_user,
-    )
+# =============================================================================
+# Humanos
+# =============================================================================
 
-
-from app.schemas.identidade import PessoaMover
-
-
-@router.post("/humanos/{login}/mover", response_model=PessoaOut)
-def mover_pessoa(
-    login: str,
-    dados: PessoaMover,
-    request: Request,
-    current_user: str = Depends(get_current_user),
+@router.get("/humanos", response_model=IdentidadeListOut, summary="Listar humanos")
+def listar_humanos(
+    arvore: Arvore = Query(Arvore.OPERATIVOS),
+    ramo: Optional[Ramo] = Query(None),
+    unidade: Optional[str] = Query(None, description="Exige 'ramo'"),
+    categoria: Optional[Categoria] = Query(None, description="Só na Direta"),
+    bloqueada: Optional[bool] = Query(None),
+    limite: int = Query(100, ge=1, le=1000),
+    deslocamento: int = Query(0, ge=0),
 ):
-    """
-    Move a pessoa para outro ramo (OPERATIVOS / INOPERANTES) ou para um
-    DN específico (ex: trocar FAZENDA → EDUCACAO dentro de Direta).
-    """
-    return identidade_service.mover_pessoa(
-        login,
-        dados.destino,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        operator=current_user,
-    )
+    return svc.listar(HUMANO, arvore, ramo, unidade, categoria, bloqueada, limite, deslocamento)
 
 
-@router.post("/humanos/{login}/bloquear", response_model=PessoaOut)
-def bloquear_pessoa(
-    login: str,
-    request: Request,
-    current_user: str = Depends(get_current_user),
+@router.post("/humanos", response_model=IdentidadeOut, status_code=201, summary="Criar humano")
+def criar_humano(dados: HumanoCreate, ctx: Ctx):
+    """Cria o humano em Inoperantes, bloqueado e sem senha. A ativação é uma operação à parte."""
+    return svc.criar_humano(dados, ctx)
+
+
+@router.get("/humanos/{login}", response_model=IdentidadeOut, summary="Consultar humano")
+def consultar_humano(login: str):
+    return svc.consultar(login, HUMANO)
+
+
+@router.patch("/humanos/{login}", response_model=IdentidadeOut, summary="Alterar atributos de um humano")
+def alterar_humano(
+    login: str, ctx: Ctx,
+    campos: dict[str, Optional[str]] = Body(..., examples=[{"pmlCpf": "00000000000"}]),
 ):
-    """Move a pessoa para INOPERANTES e marca a conta como desabilitada (UAC 514)."""
-    return identidade_service.bloquear_pessoa(
-        login,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        operator=current_user,
-    )
+    """Corpo: atributos do AD e valores. Só os atributos do arquivo de regras; só em Operativos."""
+    return svc.alterar(login, HUMANO, campos, ctx)
 
 
-@router.post("/humanos/{login}/desbloquear", response_model=PessoaOut)
-def desbloquear_pessoa(
-    login: str,
-    request: Request,
-    current_user: str = Depends(get_current_user),
+@router.post("/humanos/{login}/bloquear", response_model=IdentidadeOut, summary="Bloquear (suspender) humano")
+def bloquear_humano(login: str, ctx: Ctx):
+    """Bloqueia a autenticação SEM mover a conta. Só em Operativos."""
+    return svc.bloquear(login, HUMANO, ctx)
+
+
+@router.post("/humanos/{login}/desbloquear", response_model=IdentidadeOut, summary="Desbloquear humano")
+def desbloquear_humano(login: str, ctx: Ctx):
+    """Habilita a autenticação SEM mover a conta. Só em Operativos."""
+    return svc.desbloquear(login, HUMANO, ctx)
+
+
+@router.post("/humanos/{login}/destituir", response_model=IdentidadeOut, summary="Destituir humano")
+def destituir_humano(login: str, dados: AtoUnidade, ctx: Ctx):
+    """
+    Grava o instrumento e a data, bloqueia a conta e a move para a mesma OU em Inoperantes.
+    Vale a partir de Operativos ou de uma unidade desincorporada.
+    """
+    return ciclo.destituir(login, HUMANO, dados, ctx)
+
+
+@router.post("/humanos/{login}/ativar", response_model=AtivacaoOut, summary="Ativar (admitir) humano")
+def ativar_humano(login: str, dados: AtivarHumano, ctx: Ctx, response: Response):
+    """
+    Move de Inoperantes para Operativos (mesma unidade, ou o destino informado; obrigatório se a
+    unidade de origem estiver desincorporada), define a senha inicial e habilita a conta.
+    A senha é devolvida UMA ÚNICA VEZ. Exige TLS no controlador de domínio.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    return ciclo.ativar_humano(login, dados, ctx)
+
+
+@router.post("/humanos/{login}/redefinir-senha", response_model=SenhaRedefinidaOut,
+             summary="Redefinir a senha de humano")
+def redefinir_senha_humano(login: str, dados: RedefinirSenha, ctx: Ctx, response: Response):
+    """
+    Gera nova senha para a conta em Operativos, sem mexer no bloqueio, e exige a troca no próximo
+    logon. A senha é devolvida UMA ÚNICA VEZ; se a resposta se perder, redefina de novo.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    return ciclo.redefinir_senha_humano(login, dados, ctx)
+
+
+@router.post("/humanos/{login}/transferir", response_model=IdentidadeOut, summary="Transferir humano")
+def transferir_humano(login: str, dados: TransferirHumano, ctx: Ctx):
+    """
+    Muda o humano de unidade, de categoria e/ou de ramo, dentro de Operativos, mantendo o
+    login. Ao entrar na Direta, `categoria_destino` é obrigatória.
+    """
+    return ciclo.transferir_humano(login, dados, ctx)
+
+
+@router.delete("/humanos/{login}", status_code=204, summary="Remover fisicamente (inclusão indevida ou duplicada)")
+def remover_humano(login: str, ctx: Ctx, motivo: str = Query(..., min_length=3, max_length=200)):
+    """Só para inclusão indevida ou duplicada, e só em Inoperantes."""
+    svc.remover(login, HUMANO, motivo, ctx)
+
+
+# =============================================================================
+# Não humanos
+# =============================================================================
+
+@router.get("/naohumanos", response_model=IdentidadeListOut, summary="Listar não humanos")
+def listar_nao_humanos(
+    arvore: Arvore = Query(Arvore.OPERATIVOS),
+    ramo: Optional[Ramo] = Query(None),
+    unidade: Optional[str] = Query(None, description="Exige 'ramo'"),
+    bloqueada: Optional[bool] = Query(None),
+    limite: int = Query(100, ge=1, le=1000),
+    deslocamento: int = Query(0, ge=0),
 ):
-    """Move a pessoa de volta para OPERATIVOS e habilita a conta (UAC 512)."""
-    return identidade_service.desbloquear_pessoa(
-        login,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        operator=current_user,
-    )
+    return svc.listar(NAO_HUMANO, arvore, ramo, unidade, None, bloqueada, limite, deslocamento)
 
-@router.delete("/humanos/{login}", status_code=204)
-def remover_pessoa(login: str, request: Request, current_user: str = Depends(get_current_user)):
-    """Remove fisicamente uma identidade do AD. Só funciona se ela já estiver em Inoperantes."""
-    identidade_service.remover_pessoa(
-        login,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-        operator=current_user,
-    )
+
+@router.post("/naohumanos", response_model=IdentidadeOut, status_code=201, summary="Criar não humano")
+def criar_nao_humano(dados: NaoHumanoCreate, ctx: Ctx):
+    """Cria a conta técnica em Inoperantes, bloqueada e sem senha."""
+    return svc.criar_nao_humano(dados, ctx)
+
+
+@router.get("/naohumanos/{login}", response_model=IdentidadeOut, summary="Consultar não humano")
+def consultar_nao_humano(login: str):
+    return svc.consultar(login, NAO_HUMANO)
+
+
+@router.patch("/naohumanos/{login}", response_model=IdentidadeOut, summary="Alterar atributos de um não humano")
+def alterar_nao_humano(
+    login: str, ctx: Ctx,
+    campos: dict[str, Optional[str]] = Body(..., examples=[{"pmlNaoHumanoTipo": "bot"}]),
+):
+    """Corpo: atributos do AD e valores. Só os atributos do arquivo de regras; só em Operativos."""
+    return svc.alterar(login, NAO_HUMANO, campos, ctx)
+
+
+@router.post("/naohumanos/{login}/bloquear", response_model=IdentidadeOut, summary="Bloquear não humano")
+def bloquear_nao_humano(login: str, ctx: Ctx):
+    return svc.bloquear(login, NAO_HUMANO, ctx)
+
+
+@router.post("/naohumanos/{login}/desbloquear", response_model=IdentidadeOut, summary="Desbloquear não humano")
+def desbloquear_nao_humano(login: str, ctx: Ctx):
+    return svc.desbloquear(login, NAO_HUMANO, ctx)
+
+
+@router.post("/naohumanos/{login}/destituir", response_model=IdentidadeOut, summary="Destituir não humano")
+def destituir_nao_humano(login: str, dados: AtoUnidade, ctx: Ctx):
+    return ciclo.destituir(login, NAO_HUMANO, dados, ctx)
+
+
+@router.post("/naohumanos/{login}/ativar", response_model=AtivacaoOut, summary="Ativar não humano")
+def ativar_nao_humano(login: str, dados: AtivarNaoHumano, ctx: Ctx, response: Response):
+    """Como a ativação de humano; a conta vai para a unidade do lado NaoHumanos. A senha sai uma única vez."""
+    response.headers["Cache-Control"] = "no-store"
+    return ciclo.ativar_nao_humano(login, dados, ctx)
+
+
+@router.post("/naohumanos/{login}/redefinir-senha", response_model=SenhaRedefinidaOut,
+             summary="Redefinir a senha de não humano")
+def redefinir_senha_nao_humano(login: str, dados: RedefinirSenha, ctx: Ctx, response: Response):
+    """Como a de humano, mas sem troca no logon: a senha da conta não humana não expira."""
+    response.headers["Cache-Control"] = "no-store"
+    return ciclo.redefinir_senha_nao_humano(login, dados, ctx)
+
+
+@router.post("/naohumanos/{login}/transferir", response_model=IdentidadeOut, summary="Transferir não humano")
+def transferir_nao_humano(login: str, dados: TransferirNaoHumano, ctx: Ctx):
+    """A conta vai para a unidade de destino no lado NaoHumanos (sem categoria)."""
+    return ciclo.transferir_nao_humano(login, dados, ctx)
+
+
+@router.delete("/naohumanos/{login}", status_code=204, summary="Remover fisicamente (inclusão indevida ou duplicada)")
+def remover_nao_humano(login: str, ctx: Ctx, motivo: str = Query(..., min_length=3, max_length=200)):
+    svc.remover(login, NAO_HUMANO, motivo, ctx)

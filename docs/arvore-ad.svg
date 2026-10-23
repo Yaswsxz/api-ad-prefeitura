@@ -1,0 +1,38 @@
+<svg width="100%" viewBox="0 0 820 640" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Árvore do Active Directory PML</title>
+  <desc>Sob a raiz PML ficam as árvores Operativos, Inoperantes e Desincorporados. Em cada uma, as OUs Humanos e NaoHumanos; dentro de cada uma, os ramos Direta, Indireta, Terceirizadas e Prepostos e suas unidades. Só em Humanos/Direta a unidade se divide em Estagio, Carreira e Comissionados.</desc>
+  <style>
+    .fundo { fill: #ffffff; }
+    .t { font: 14px "Consolas", "DejaVu Sans Mono", monospace; fill: #1f2933; white-space: pre; }
+    .fixo { fill: #0b5cab; font-weight: bold; }
+    .hum { fill: #1b7f3b; font-weight: bold; }
+    .nao { fill: #a15c00; font-weight: bold; }
+    .nota { fill: #52606d; font-style: italic; }
+    .conta { fill: #3e4c59; }
+    @media (prefers-color-scheme: dark) {
+      .fundo { fill: #1f2933; } .t { fill: #e4e7eb; } .fixo { fill: #6cb1ff; } .hum { fill: #5fd38a; }
+      .nao { fill: #ffb454; } .nota { fill: #9aa5b1; } .conta { fill: #cbd2d9; }
+    }
+  </style>
+  <rect class="fundo" x="0" y="0" width="820" height="640" rx="8"/>
+  <text class="t" x="20" y="30"><tspan class="fixo">PML-DOMAIN*</tspan>  <tspan class="nota">(AD_PML_BASE; * = nó de presença fixa)</tspan></text>
+  <text class="t" x="20" y="56">├── <tspan class="fixo">Operativos*</tspan>  <tspan class="nota">estrutura ativa</tspan></text>
+  <text class="t" x="20" y="82">│   ├── <tspan class="hum">Humanos*</tspan>  <tspan class="nota">base LDAP só de humanos (ex.: realm do Keycloak)</tspan></text>
+  <text class="t" x="20" y="108">│   │   ├── Direta*  └── &lt;UNIDADE&gt; ── <tspan class="hum">Estagio</tspan> | <tspan class="hum">Carreira</tspan> | <tspan class="hum">Comissionados</tspan></text>
+  <text class="t" x="20" y="134">│   │   │                             └── <tspan class="conta">simon.fraser, arthur.thomas</tspan>  <tspan class="nota">(em Carreira)</tspan></text>
+  <text class="t" x="20" y="160">│   │   ├── Indireta*      └── &lt;UNIDADE&gt;  <tspan class="nota">(humanos direto na unidade)</tspan></text>
+  <text class="t" x="20" y="186">│   │   ├── Terceirizadas* └── &lt;UNIDADE&gt;  <tspan class="nota">(idem)</tspan></text>
+  <text class="t" x="20" y="212">│   │   └── Prepostos*     └── &lt;UNIDADE&gt;  <tspan class="nota">(idem)</tspan></text>
+  <text class="t" x="20" y="238">│   └── <tspan class="nao">NaoHumanos*</tspan>  <tspan class="nota">base LDAP só de contas não humanas</tspan></text>
+  <text class="t" x="20" y="264">│       ├── Direta*        └── &lt;UNIDADE&gt;  <tspan class="nota">(sem categorias)</tspan></text>
+  <text class="t" x="20" y="290">│       │                          └── <tspan class="conta">nhu.sistema.contas</tspan></text>
+  <text class="t" x="20" y="316">│       ├── Indireta*      └── &lt;UNIDADE&gt;</text>
+  <text class="t" x="20" y="342">│       ├── Terceirizadas* └── &lt;UNIDADE&gt;</text>
+  <text class="t" x="20" y="368">│       └── Prepostos*     └── &lt;UNIDADE&gt;</text>
+  <text class="t" x="20" y="394">├── <tspan class="fixo">Inoperantes*</tspan>  <tspan class="nota">espelho de Operativos: mesma forma (Humanos e NaoHumanos, 4 ramos)</tspan></text>
+  <text class="t" x="20" y="420">└── <tspan class="fixo">Desincorporados*</tspan>  <tspan class="nota">recebe as unidades migradas: mesma forma</tspan></text>
+  <text class="t" x="20" y="470" ><tspan class="nota">• A unidade existe nos dois lados (Humanos e NaoHumanos) de cada árvore.</tspan></text>
+  <text class="t" x="20" y="494" ><tspan class="nota">• Desativar = mover para o caminho análogo em Inoperantes; desincorporar move os dois lados da unidade.</tspan></text>
+  <text class="t" x="20" y="518" ><tspan class="nota">• Categorias (Estagio, Carreira, Comissionados) só existem em Humanos/Direta.</tspan></text>
+  <text class="t" x="20" y="542" ><tspan class="nota">• Contas dos exemplos são ilustrativas. O sAMAccountName é a chave da identidade.</tspan></text>
+</svg>

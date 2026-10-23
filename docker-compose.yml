@@ -1,0 +1,89 @@
+# API de Identidades no Active Directory (PML) — execução em container.
+#
+#   cp .env.example .env     # e preencha (o arquivo nunca vai para a imagem nem para o Git)
+#   docker compose up -d --build          # com Podman: podman compose up -d --build  (podman machine start antes, no Windows)
+#   docker compose logs -f api
+#
+# Tudo o que muda de ambiente para ambiente é variável; os padrões servem para desenvolvimento.
+# O Compose lê o .env do diretório para interpolar as variáveis API_* abaixo. A API recebe o .env (ou outro
+# arquivo, em API_ENV_FILE) MONTADO em /app/.env e o lê sozinha, como fora do container. Não se usa env_file:
+# o Compose interpolaria o "$" do hash do segredo (pbkdf2_sha256$iter$salt$hash) e o corromperia.
+#
+#   API_ENV_FILE         arquivo de ambiente da API                        (padrão .env)
+#   API_CONFIG_DIR       pasta de configuração no host (regras.toml, tls/) (padrão ./config)
+#   API_LOGS_DIR         pasta de logs e auditoria no host                 (padrão ./logs)
+#   API_BIND / API_PORT  onde a porta é publicada no host                  (padrão 127.0.0.1:8000)
+#   API_UID / API_GID    dono dos arquivos criados em API_LOGS_DIR         (padrão 1000:1000)
+#   API_IMAGE_TAG        tag da imagem                                     (padrão local)
+#   TZ                   fuso: o log da API vira por dia local             (padrão America/Sao_Paulo)
+#   FORWARDED_ALLOW_IPS  IPs de proxy em que o uvicorn confia no X-Forwarded-For (padrão 127.0.0.1)
+
+services:
+  api:
+    build: .
+    image: pml-api-active-directory:${API_IMAGE_TAG:-local}
+    init: true
+    restart: unless-stopped
+    # Os arquivos de log nascem com o dono do host (id -u / id -g); a pasta de logs precisa ser gravável por ele.
+    # Podman rootless: o uid do container não é o do host; use userns_mode: "keep-id" (com API_UID = seu uid) ou API_UID=0
+    # (root do container = seu usuário). Podman rootful (máquina do Windows) e Docker: o padrão 1000 funciona.
+    user: "${API_UID:-1000}:${API_GID:-1000}"
+    environment:
+      # Invariantes do container: casam com os volumes abaixo. Mantenha LOG_DIR, API_LOG_FILE, DATABASE_URL e
+      # AUDITORIA_CONTINGENCIA_FILE vazios no .env: caminhos do host não valem aqui dentro.
+      LOG_DIR: /app/logs
+      TZ: ${TZ:-America/Sao_Paulo}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Só se o handshake com o DC (TLS 1.0) falhar na imagem; ver README, "Execução em container":
+      # OPENSSL_CONF: /app/config/openssl-legado.cnf
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+    volumes:
+      - ${API_ENV_FILE:-./.env}:/app/.env:ro             # o .env do host (o arquivo precisa existir)
+      - ${API_CONFIG_DIR:-./config}:/app/config:ro
+      - ${API_LOGS_DIR:-./logs}:/app/logs
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # /health é estático: não toca no AD.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Limita só a cópia do console mantida pelo Docker; os arquivos de logs/ não são tocados.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  # Testes dentro da imagem, sem subir a API:
+  #   docker compose run --rm testes
+  #   docker compose run --rm testes python -m pytest -m integration tests/test_tls_dc.py   (handshake real com o DC)
+  testes:
+    profiles:
+      - testes
+    build: .
+    image: pml-api-active-directory:${API_IMAGE_TAG:-local}
+    user: "${API_UID:-1000}:${API_GID:-1000}"
+    environment:
+      LOG_DIR: /app/logs
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ${API_ENV_FILE:-./.env}:/app/.env:ro
+      - ./tests:/app/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+      - ./testes_aceitacao/massa:/app/testes_aceitacao/massa:ro   # tests/test_massa_aceitacao.py lê a massa
+      - ${API_CONFIG_DIR:-./config}:/app/config:ro
+      - ${API_LOGS_DIR:-./logs}:/app/logs
+    command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
