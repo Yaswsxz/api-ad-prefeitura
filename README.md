@@ -4,31 +4,29 @@
 
 ## Nome do Sistema/Módulo
 
-API de gestão de identidades no Active Directory da Prefeitura de Londrina (versão 2.0.0).
+API de Gestão de Identidades no Active Directory da Prefeitura de Londrina.
 
 ## Propósito
 
 A Prefeitura mantém no Active Directory (AD) as identidades de **pessoas** (humanos: servidores de carreira, comissionados e
 estagiários) e de **contas técnicas** (não humanos: robôs, impressoras, serviços). A estrutura organizacional (órgãos da
 Administração Direta e Indireta, empresas terceirizadas e prepostos) e a vida funcional dessas identidades (admissão,
-destituição, transferência, bloqueio) precisam ser refletidas no AD de forma padronizada, auditável e segura.
+destituição, transferência, bloqueio) busca ser refletidas no AD de forma padronizada, auditável e segura por meio deste projeto.
 
-Esta API é um serviço REST de **administração** do AD, chamado por um front-end/sistema de administração (não por usuários
-finais). Em vez de expor LDAP, oferece **operações de nível de negócio** — "criar unidade da Administração Direta", "ativar
+Esta API é um serviço REST de **administração** do AD,  destinado a ser consumido por um front-end/sistema de administração back-office. 
+A API oferece **operações de nível de negócio** — "criar unidade da Administração Direta", "ativar
 servidor", "destituir estagiário", "desincorporar unidade" — e cuida dos detalhes: onde cada objeto fica na árvore, bloqueio e
-habilitação de contas, senha inicial, atributos de registro e trilha de auditoria.
+habilitação de contas, senha inicial, atributos de registro e trilha de auditoria, evitando assim a granularidade de operações LDAP.
 
 **Proposta de valor**
 
 - Os sistemas integrados não demandam conhececimento de LDAP ou a estrutura convencionada da árvore, ficando ao encargo da API preservar e impor o modelo.
 - **Identidade nunca é excluída**: ao sair de operação é movido para o local análogo em `Inoperantes` de modo que a remoção física só
   existe para inclusão indevida ou duplicada e preservando assim "a memória" da estrutura.
-- **Humanos e não humanos isolados no topo da árvore**: existe uma base LDAP apenas de identidades destinadas a humanos (`OU=Humanos,OU=Operativos,...`),
+- **Humanos e não humanos são isolados no topo da árvore**: existe uma base LDAP apenas de identidades destinadas a humanos (`OU=Humanos,OU=Operativos,...`),
   o que simplifica os realms exclusivamente humanos no Keycloak.
 - **Contenção**: nada se lê nem se escreve fora de `OU=<RAIZ>,DC=londrina,DC=pr,DC=gov,DC=br`, onde convivem objetos de produção.
 - **Auditoria completa** de toda escrita, em duas fases (a intenção é gravada antes de alterações no AD), nenhuma senha exposta em log.
-- Quando o AD recusa uma operação por falta de permissão ou de atributo, a API traduz o erro e diz **qual permissão pedir** à
-  Infraestrutura.
 
 ## Secretaria/Órgão Gestor
 
@@ -119,14 +117,14 @@ flowchart TB
 | `config/` | `regras.toml` (atributos alteráveis e tipos de não humano) e `tls/` (certificado público fixado do DC) |
 | `tests/` | Testes com dublês (`pytest`; AD em memória, nenhum acesso ao AD) |
 | `tests/aceitacao/` | Campanha de aceitação por `curl` contra a API e o AD de desenvolvimento: fases `f0`…`f9`, massa em `massa/*.tsv` e `README.md` |
-| `docs/` | Diagrama da árvore, especificação e relatórios dos testes de aceitação e a especificação legada |
+| `docs/` | Diagrama da árvore do AD (`arvore-ad.svg`) e especificação e relatórios dos testes de aceitação (`testes/`) |
 
 ### A árvore do AD
 
 ```
 <AD_PML_BASE>  (hoje OU=PML,OU=DESENVOL,...)
  ├── Operativos        estrutura ativa
- ├── Inoperantes       espelho de Operativos: quem sai de operação vem para cá
+ ├── Inoperantes       espelho de Operativos: sair de operação implica ser movido para este ponto
  └── Desincorporados   unidades que deixaram o quadro (com todo o conteúdo)
         em cada uma das três:
         ├── Humanos
@@ -138,7 +136,7 @@ flowchart TB
 
 Diagrama: [`docs/arvore-ad.svg`](docs/arvore-ad.svg). Regras principais:
 
-- Tudo é `organizationalUnit` (`OU=`); o nome da unidade (maiúsculas) é **único em toda a árvore**.
+- Todos nós de seperação lógica são `organizationalUnit` (`OU=`); o nome da unidade (maiúsculas) é **único em toda a árvore**.
 - A unidade existe nos dois lados (`Humanos` e `NaoHumanos`) de cada árvore; as categorias só existem em `Humanos/Direta`.
 - Desativar = mover para o caminho análogo em `Inoperantes`. Desincorporar move **os dois lados** da unidade e bloqueia as
   contas; o espelho em `Inoperantes` permanece.
@@ -147,13 +145,9 @@ Diagrama: [`docs/arvore-ad.svg`](docs/arvore-ad.svg). Regras principais:
 
 ### Contenção e segurança
 
-- **Raiz constante** (`app/core/raiz.py`): `OU=DESENVOL,...` está no código, não na configuração. Toda operação LDAP (leitura ou
-  escrita) tem o DN validado por componentes RDN, com origem e destino em mudanças de DN; base de busca vazia é recusada.
-- **Sem rootDSE nem schema**: a conexão não os lê; a existência de atributos é descoberta pelo erro do AD.
-- **Escape** de filtros LDAP e de RDN em todo valor vindo do cliente; nenhuma rota aceita DN.
 - **TLS obrigatório**: o controlador atual só fala TLS 1.0 (RSA 1024, SHA-1); a limitação foi aceita e o
   certificado do DC é **fixado** (`config/tls/cegonha.pem`), conferido antes de qualquer credencial.
-- **Cliente único** autenticado por chave própria; sem papéis finos na v1. O administrador humano pode ser
+- **Cliente único** autenticado por chave. O administrador humano pode ser
   informado em `X-Administrador` e é registrado **sem verificação**.
 - Senhas: geradas pela API, devolvidas uma única vez com `Cache-Control: no-store`, **nunca** em log nem auditoria.
 
@@ -165,14 +159,15 @@ Diagrama: [`docs/arvore-ad.svg`](docs/arvore-ad.svg). Regras principais:
   ou `INCONSISTENTE`) é gravado depois, e se isso falhar o fato vai para um arquivo de contingência.
 - **Operações compostas** têm pré-validação, compensação em falha parcial e marca `INCONSISTENTE` quando a compensação também falha.
 - **Atributos de registro `pml*`** (instrumento e data dos atos, CPF, tipo de não humano): ainda **não existem no schema do AD**;
-  a extensão é pedida à Infraestrutura. Enquanto isso as operações que os gravam falham com
+  a extensão está pendente junto à Gerência de Infraestrutura. Enquanto isso as operações que os gravam falham com
   `AD_SCHEMA_INCOMPLETO` — ou, só em desenvolvimento, `PML_GRAVAR=false` pula a gravação e avisa na resposta.
 
 ## Documentação
 
 ### Pré-requisitos e instalação
 
-Python 3.12, acesso de rede ao controlador de domínio e uma conta de serviço do AD com as permissões necessárias (cada erro `AD_PERMISSAO_NEGADA` indica a permissão a pedir à Infraestrutura).
+Python 3.12, acesso de rede ao controlador de domínio e uma conta de serviço do AD. As permissões que faltarem aparecem como
+`AD_PERMISSAO_NEGADA` e a linha `AD_ERRO` do log indica qual solicitar (ver "Logs e auditoria").
 
 ```bash
 git clone https://gitlab.londrina.pr.gov.br/GRDS-1/estagio-id/pml-api-active-directory.git
@@ -210,8 +205,7 @@ python -m pytest -m integration              # opt-in: handshake TLS real com o 
 
 ### Execução em container (Docker Compose)
 
-A imagem é `python:3.12-slim` (Debian, não alpine: as dependências de criptografia têm *wheels* para ela e instalam sem
-compilador) com o código dentro; **configuração, logs e `.env` ficam no host**.
+A imagem é `python:3.12-slim` com o código dentro; **configuração, logs e `.env` ficam no host**.
 
 #### Primeira instalação
 
@@ -262,7 +256,7 @@ docker compose run --rm testes          # pytest dentro da imagem (AD em memóri
 | Volume / entrada | No host (padrão) | No container | Observação |
 |---|---|---|---|
 | Configuração | `./config` (`API_CONFIG_DIR`) | `/app/config` (somente leitura) | `regras.toml` e o certificado fixado do DC (`tls/cegonha.pem`) |
-| Logs e auditoria | `./logs` (`API_LOGS_DIR`) | `/app/logs` | `api_ad*.log`, `uvicorn.log`, `ad_audit.db`, contingência; política de quebra sem apagar |
+| Logs e auditoria | `./logs` (`API_LOGS_DIR`) | `/app/logs` | `api_ad*.log`, `uvicorn.log`, `ad_audit.db`, contingência; nada é apagado |
 | Ambiente | `.env` (`API_ENV_FILE`) | `/app/.env` (somente leitura) | lido pela própria API, como fora do container; o Compose não o injeta (interpolaria o `$` do hash do segredo e o corromperia) |
 | Certificados HTTPS | `./.certs` (`API_CERTS_DIR`) | `/etc/nginx/certs` do nginx (somente leitura) | `fullchain.crt` e `fullchain.key`, fornecidos pela CA; nunca vão ao Git nem à imagem |
 | Configuração do nginx | `./config/nginx` (`NGINX_CONF_DIR`) | `/etc/nginx/templates` do nginx (somente leitura) | `default.conf.template`, com as variáveis do Compose |
@@ -295,7 +289,7 @@ Pontos de atenção:
 - **TLS 1.0 com o DC na imagem Debian**: o handshake foi verificado na imagem (Podman) e funciona sem ajuste. Para repetir:
   `docker compose run --rm testes python -m pytest -m integration tests/test_tls_dc.py`. Se um dia falhar (imagem base nova com
   política mais estrita), descomente `OPENSSL_CONF` no `docker-compose.yml`
-  (usa o `config/openssl-legado.cnf`, com `MinProtocol = TLSv1` e `CipherString = ALL:@SECLEVEL=0`); vale só para o serviço da API, restrita ao canal com o AD.
+  (usa o `config/openssl-legado.cnf`, com `MinProtocol = TLSv1` e `CipherString = ALL:@SECLEVEL=0`); vale só para o serviço da API, e a relaxação é a mesma já aceita para o canal com o AD.
 
 ### HTTPS (nginx) e certificados
 
@@ -316,7 +310,8 @@ sem certificado válido o nginx não sobe (veja
 
 ### Endpoints
 
-Todas as rotas, exceto `/`, `/health` e `/auth/token`, exigem `Authorization: Bearer <token>`. O contrato completo (corpos, regras e códigos de erro) está no Swagger (`/docs`).
+Todas as rotas, exceto `/`, `/health` e `/auth/token`, exigem `Authorization: Bearer <token>`. Corpos, regras e códigos de erro de
+cada rota estão no Swagger (`/docs`).
 
 | Prefixo | O que faz |
 |---|---|
@@ -356,14 +351,6 @@ Senhas nunca são auditadas nem registradas em log. O CPF é um campo comum e po
 os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha nova, o conteúdo antigo das três árvores sob
 `OU=PML` precisa estar limpo. Detalhes em [`tests/aceitacao/README.md`](tests/aceitacao/README.md).
 
-### Documentos do projeto
-
-| Documento | Para que serve |
-|---|---|
-| [`docs/arvore-ad.svg`](docs/arvore-ad.svg) | Diagrama da árvore do AD |
-| [`docs/testes/`](docs/testes/) | Especificação e resultados dos testes de aceitação |
-| [`docs/legado/`](docs/legado/) | Especificação antiga (não vigente) |
-
 ### Problemas conhecidos
 
 - **Canal com o DC fraco** — TLS 1.0, RSA 1024, SHA-1; limitação aceita. O certificado fixado vence em
@@ -382,7 +369,7 @@ os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha no
 | `AD_TLS_INDISPONIVEL` | o DC recusou o TLS (veja `AD_TLS_LEGADO` e `AD_SERVER=ldaps://...`) |
 | `AD_CERTIFICADO_NAO_CONFERE` | o DC apresentou outro certificado que o fixado em `AD_TLS_CERT_FIXADO` (renovado?) |
 | `AD_PERMISSAO_NEGADA` | falta permissão à conta da API; use a linha `AD_ERRO` do log para pedir à Infraestrutura |
-| `AD_SCHEMA_INCOMPLETO` | atributo `pml*` ausente no schema (a Infraestrutura precisa estender o schema) |
+| `AD_SCHEMA_INCOMPLETO` | atributo `pml*` ausente no schema (a extensão é feita pela Infraestrutura; ver "Dados e auditoria") |
 | `NAO_ENCONTRADO` (noSuchObject) | `.env` errado, `AD_PML_BASE` incorreto ou a unidade não existe |
 | API não reflete mudança / "Failed to fetch" | processo antigo do uvicorn ainda rodando; encerre-o e suba de novo |
 | Container: `permission denied` em `/app/logs` | a pasta `logs/` do host não é gravável por `API_UID:API_GID` (veja `id -u` e `chown`) |
@@ -395,15 +382,10 @@ os resultados estão em [`docs/testes/`](docs/testes/). Antes de uma campanha no
 | Container `unhealthy` | `docker compose logs api`: `.env` incompleto (`Field required`) ou `AD_PML_BASE` inválido |
 | Pylance sublinhando imports | interpretador errado no VS Code — `Ctrl+Shift+P` → Select Interpreter |
 
-### Fluxo de trabalho (Git)
-
-`origin` é o GitLab oficial e a `main` é protegida: trabalhe em uma branch e abra Merge Request. Todo comportamento novo vem com
-teste com dublê; executar testes ou tocar o AD só com autorização do responsável (regras do projeto: nada fora de `OU=DESENVOL` e permissões do AD descobertas por uso).
-
 ## Implantação
 
-* acessodev.londrina.pr.gov.br (testes)
-* acesso.londrina.pr.gov.br (produção)
+* <definir>.londrina.pr.gov.br (testes)
+* <definir>.londrina.pr.gov.br (produção)
 
 A API foi validada contra o AD de desenvolvimento (`OU=DESENVOL`). Antes de produção: extensão do schema com os atributos `pml*`
 (Infraestrutura), `AMBIENTE=prod` com `PML_GRAVAR=true`, entrega do segredo do cliente ao front-end, HTTPS entre o front-end e a
@@ -412,5 +394,5 @@ API e atualização do certificado fixado quando o do DC for renovado.
 ## Autores
 
 * **Ricardo Faggion** — Analista de Sistemas - Prefeitura de Londrina (concepção, arquitetura, revisão de código e commits evolutivos)
-* **Yasmin Fernanda de Carvalho** — Estagiária (Unicesumar) na Prefeitura de Londrina (contribuições no repositório)
-* **Augusto Henrique Carreiro Zardo** — Estagiário (UFPG) na Prefeitura de Londrina (contribuições no repositório)
+* **Yasmin Fernanda de Carvalho** — Estagiária (Unicesumar-Londrina) na Prefeitura de Londrina (contribuições no repositório)
+* **Augusto Henrique Carreiro Zardo** — Estagiário (UEPG-PR) na Prefeitura de Londrina (contribuições no repositório)
